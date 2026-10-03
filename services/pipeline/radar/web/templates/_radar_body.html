@@ -1,0 +1,83 @@
+{% import "_macros.html" as m with context %}
+
+{# ③ 今日雷達：10 秒知道有哪些異常；先看分類，點開才看股票 #}
+<section class="page-head" aria-labelledby="radar-title">
+  <div class="hero-head">
+    <div class="title"><p class="eyebrow" aria-hidden="true">Radar</p><h1 id="radar-title">今日雷達 <span class="count">{{ total }} 個訊號</span></h1></div>
+    {{ m.daynav('/radar') }}
+  </div>
+  {% if requested and requested != day %}<p class="note">{{ requested }} 沒有開市，顯示在這之前最近的交易日。</p>{% endif %}
+</section>
+
+<div class="home-grid">
+  <section class="block radar" id="radar" aria-label="各類訊號">
+    <p class="lead beg-only">點分類就能看是哪些股票、為什麼被雷達抓到；點股票名稱看它的完整說明。按 <span class="help static" aria-hidden="true">?</span> 看名詞說明。</p>
+    {% for sec in radar %}
+    <div class="radar-cat">
+      <h2 class="cat-title">{{ sec.label }}<span class="muted">・{{ sec.total }}</span></h2>
+      {% for it in sec.types %}
+      {% set n = it.rows|length %}
+      {% set head %}
+        {{ m.dot(it.info.tone) }}<span class="r-name">{{ it.info.label }}{{ m.help(it.info.type) }}</span>
+        <span class="r-hint beg-only">{{ it.info.what }}{% if bt is defined and bt.verdicts[it.info.type] and bt.verdicts[it.info.type].key != 'few' %}
+          <span class="r-past">過去：{{ bt.verdicts[it.info.type].label }}</span>{% endif %}</span>
+        <span class="r-count">{{ n }}</span>
+      {% endset %}
+      {% if n %}
+      <details class="radar-row" id="{{ it.info.type }}">
+        <summary>{{ head }}</summary>
+        <div class="scroll"><table class="list">
+          <thead><tr><th>股票</th><th class="std-only">產業</th><th class="beg-only">為什麼被雷達抓到</th><th class="std-only">依據</th><th class="num std-only">收盤</th><th class="num">今日漲跌</th></tr></thead>
+          <tbody>
+          {% for r in it.rows %}
+            <tr>
+              <td class="sym">{{ m.stock_link(r.symbol, r.name) }}</td>
+              <td class="muted std-only">{{ r.industry or '' }}</td>
+              <td class="beg-only">{{ r.sentence }}</td>
+              <td class="std-only">{{ r.evidence_text }}</td>
+              <td class="num std-only">{{ r.close|price }}</td>
+              <td class="num {{ r.day_pct|tone }}">{{ r.day_pct|ret }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table></div>
+      </details>
+      {% else %}
+      <div class="radar-row empty">{{ head }}</div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+
+  {# 市場熱點與多訊號個股：標準模式才顯示，新手先專心看雷達 #}
+  <aside class="std-only">
+    <section class="block" aria-labelledby="hot-title">
+      <h2 id="hot-title" class="h-small">市場熱點</h2>
+      <p class="small muted">哪些產業今天出現比較多異常訊號（只是計數，不評價產業好壞）。</p>
+      {% if hotspots %}
+      <ul class="hotspots">
+        {% for h in hotspots %}
+        <li>
+          <div class="hs-head"><b>{{ h.industry }}</b><span class="muted">{{ h.total }} 個訊號</span></div>
+          <ul class="hs-types">{% for t in h.types %}<li>{{ m.dot(t.tone) }}{{ t.label }}{% if t.count > 1 %} ×{{ t.count }}{% endif %}</li>{% endfor %}</ul>
+          <div class="small">{% for s in h.stocks[:4] %}{{ m.stock_link(s.symbol, s.name) }}{% if not loop.last %}、{% endif %}{% endfor %}{% if h.stocks|length > 4 %} 等 {{ h.stocks|length }} 檔{% endif %}</div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="empty">今天沒有產業出現兩個以上的訊號。</p>{% endif %}
+    </section>
+
+    {% if multi %}
+    <section class="block" aria-labelledby="multi-title">
+      <h2 id="multi-title" class="h-small">同時出現多個訊號的個股</h2>
+      <ul class="multi">
+        {% for s in multi %}
+        <li><span class="sym">{{ m.stock_link(s.symbol, s.name) }}</span> <span class="num {{ s.day_pct|tone }}">{{ s.day_pct|ret }}</span>
+          <div class="tags">{% for g in s.signals %}<span class="tag">{{ m.dot(g.tone) }}{{ g.label }}</span>{% endfor %}</div></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </aside>
+</div>

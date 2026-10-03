@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% set tab = 'landing' %}
+{% block title %}台股市場雷達｜{{ day|day }} 盤後{% endblock %}
+{% block body_class %}landing-open{% endblock %}
+{% block content %}
+<section class="landing" aria-labelledby="lp-title">
+{% include "_landing_body.html" %}
+</section>
+{% endblock %}

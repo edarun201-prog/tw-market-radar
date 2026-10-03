@@ -1,0 +1,16 @@
+{# 每種訊號的說明，整頁只放一份；內容全部來自 radar/explain.py #}
+{% import "_macros.html" as m with context %}
+{% for i in SIGNAL_INFO.values() %}
+<div id="help-{{ i.type }}" popover class="popover" role="dialog" aria-labelledby="help-{{ i.type }}-title">
+  <div class="popover-head">
+    <h3 id="help-{{ i.type }}-title">{{ m.dot(i.tone) }}{{ i.label }}<span class="muted small">・{{ i.category_label }}</span></h3>
+    <button type="button" class="close" popovertarget="help-{{ i.type }}" popovertargetaction="hide" aria-label="關閉">×</button>
+  </div>
+  <dl class="explain">
+    <dt>這是什麼</dt><dd>{{ i.what }}</dd>
+    <dt>代表什麼</dt><dd>{{ i.means }}</dd>
+    <dt>不代表什麼</dt><dd>{{ i.not_mean }}</dd>
+  </dl>
+  <p class="small muted">判斷條件：{{ i.rule }}。同一檔股票 {{ i.cooldown }} 個交易日內不重複標記。</p>
+</div>
+{% endfor %}

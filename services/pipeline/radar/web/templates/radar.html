@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% set tab = 'radar' %}
+{% block title %}今日雷達 {{ day|day }}｜台股市場雷達{% endblock %}
+{% block content %}
+{% include "_radar_body.html" %}
+{% endblock %}

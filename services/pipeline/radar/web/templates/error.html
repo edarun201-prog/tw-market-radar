@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ status }}｜台股市場雷達{% endblock %}
+{% block content %}
+<section class="block error">
+  <h1>{{ '找不到這個頁面' if status == 404 else '暫時無法顯示' }}</h1>
+  <p>{{ detail }}</p>
+  <p><a href="/market">回到今日市場</a>，或<a href="/search">搜尋股票</a>。</p>
+</section>
+{% endblock %}

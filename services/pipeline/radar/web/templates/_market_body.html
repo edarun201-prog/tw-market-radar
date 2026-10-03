@@ -1,0 +1,101 @@
+{% import "_macros.html" as m with context %}
+{% set i = ov.index %}{% set b = ov.breadth %}
+
+{# ① 今日市場：3 秒看懂今天大盤 #}
+{% include "_live_panel.html" %}
+
+<section class="hero" id="top" aria-labelledby="market-title">
+  <div class="hero-head">
+    <div class="title"><p class="eyebrow" aria-hidden="true">Market</p><h1 id="market-title">今日市場</h1></div>
+    {{ m.daynav('/market') }}
+  </div>
+  {% if requested and requested != day %}<p class="note">{{ requested }} 沒有開市，顯示在這之前最近的交易日。</p>{% endif %}
+  <div class="state-line">
+    <span class="state {{ state.tone }}">{{ state.label }}</span>
+    <p>{{ state.sentence }}</p>
+  </div>
+  <dl class="keyfig">
+    <div><dt>加權指數</dt><dd>{% if i %}<b>{{ i.close|price }}</b> <span class="{{ i.change|tone }}">{{ i.change_pct|pct }}</span>{% else %}–{% endif %}</dd></div>
+    <div><dt>上漲家數</dt><dd class="up">{{ b.advancers if b else '–' }}</dd></div>
+    <div><dt>下跌家數</dt><dd class="down">{{ b.decliners if b else '–' }}</dd></div>
+    <div><dt>成交金額</dt><dd>{{ b.total_turnover|yi if b else '–' }}</dd></div>
+  </dl>
+  {% set o, ob = ov.otc, ov.otc_breadth %}
+  {% if o or ob %}
+  {# 上櫃：櫃買中心的資料（上面的數字都是上市） #}
+  <p class="otc-line small"><b>上櫃</b>
+    {% if o %}<span>櫃買指數 {{ o.close|price }} <span class="{{ o.change|tone }}">{{ o.change_pct|pct }}</span></span>{% endif %}
+    {% if ob %}<span>上漲 <span class="up">{{ ob.advancers if ob.advancers is not none else '–' }}</span>・下跌 <span class="down">{{ ob.decliners if ob.decliners is not none else '–' }}</span></span>
+    <span>成交金額 {{ ob.total_turnover|yi }}</span>{% endif %}
+  </p>
+  {% endif %}
+  {% if b %}
+  <div class="hero-detail std-only">
+    <div class="spark-box">{{ spark|safe }}<span class="small muted">加權指數近 {{ ov.index_history|length }} 個交易日，今天 {{ i.change|signed if i else '–' }} 點</span></div>
+    <dl class="kv">
+      <div><dt>平盤</dt><dd>{{ b.unchanged }}</dd></div>
+      <div><dt>漲停</dt><dd class="up">{{ b.limit_up if b.limit_up is not none else '–' }}</dd></div>
+      <div><dt>跌停</dt><dd class="down">{{ b.limit_down if b.limit_down is not none else '–' }}</dd></div>
+      <div><dt>未成交</dt><dd>{{ b.no_trade if b.no_trade is not none else '–' }}</dd></div>
+      <div><dt>成交量</dt><dd>{{ b.total_volume|lots }} 張</dd></div>
+      <div><dt>成交筆數</dt><dd>{{ '{:,}'.format(b.total_trades) if b.total_trades else '–' }}</dd></div>
+    </dl>
+  </div>
+  {% endif %}
+</section>
+
+{% if ov.summary %}
+{% set simulated = ov.summary.provider == 'simulated' %}
+<section class="block summary-block" aria-labelledby="sum-title">
+  <h2 id="sum-title" class="h-small">{{ '盤後摘要（模擬）' if simulated else 'AI 盤後摘要' }}</h2>
+  <p class="summary">{{ ov.summary.content }}</p>
+  <p class="small muted">{% if simulated %}依固定規則從當日數字組成，沒有使用 AI 模型。{% else %}由 AI 依當日資料庫中的數字產生（{{ ov.summary.model }}）。{% endif %}只描述發生了什麼，不構成投資建議。</p>
+</section>
+{% endif %}
+
+<div class="home-grid">
+  {# ② 今日雷達的總覽：每一類有幾個訊號；點進去是「今日雷達」頁 #}
+  <section class="block" aria-labelledby="brief-title">
+    <div class="sec-head">
+      <h2 id="brief-title">今日雷達</h2>
+      <span class="count">{{ total }} 個訊號</span>
+      <a class="more" href="{{ m.page_href('radar') }}">看全部 ›</a>
+    </div>
+    <p class="lead beg-only">雷達每天盤後檢查所有上市股票，找出成交量、價格、法人動向和平常不一樣的地方。點一類就能看是哪些股票、為什麼被抓到。</p>
+    {% for sec in radar %}
+    <div class="radar-cat">
+      <h3 class="cat-title">{{ sec.label }}<span class="muted">・{{ sec.total }}</span></h3>
+      {% for it in sec.types %}
+      {% set n = it.rows|length %}
+      {% if n %}
+      <a class="radar-row link" href="{{ m.page_href('radar', it.info.type) }}">
+        {{ m.dot(it.info.tone) }}<span class="r-name">{{ it.info.label }}</span>
+        <span class="r-hint beg-only">{{ it.info.what }}</span>
+        <span class="r-count">{{ n }}</span></a>
+      {% else %}
+      <div class="radar-row empty">{{ m.dot(it.info.tone) }}<span class="r-name">{{ it.info.label }}</span>
+        <span class="r-hint beg-only">{{ it.info.what }}</span><span class="r-count">0</span></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <aside class="std-only">
+    <section class="block" aria-labelledby="sector-title">
+      <h2 id="sector-title" class="h-small">類股指數漲跌</h2>
+      {% if sectors.rows %}
+      <ol class="sectors">
+        {% for s in sectors.rows %}
+        {% if s is none %}<li class="gap" aria-hidden="true">⋯</li>{% else %}
+        <li><span>{{ s.name|replace('類指數', '') }}</span>
+          <span class="meter"><i class="{{ s.change_pct|tone }}-bg" style="width: {{ '%.1f'|format(100 * (s.change_pct|float|abs) / sectors.max) }}%"></i></span>
+          <span class="num {{ s.change_pct|tone }}">{{ s.change_pct|pct }}</span></li>
+        {% endif %}
+        {% endfor %}
+      </ol>
+      <p class="small muted">{{ sectors.count }} 個類股指數中漲幅最大與最小各 5 個。</p>
+      {% else %}<p class="empty">沒有類股指數資料</p>{% endif %}
+    </section>
+  </aside>
+</div>

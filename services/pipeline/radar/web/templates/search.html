@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% set tab = 'search' %}
+{% block title %}{{ '搜尋「' ~ query ~ '」' if query else '搜尋股票' }}｜台股市場雷達{% endblock %}
+{% block content %}
+<section class="block">
+  <p class="eyebrow" aria-hidden="true">Search</p>
+  <h1>{{ '搜尋「' ~ query ~ '」' if query else '搜尋股票' }}</h1>
+  <form class="page-search" action="/search" role="search">
+    <input name="q" type="search" placeholder="代號或名稱，例：2330、台積電" value="{{ query }}" aria-label="搜尋股票"
+           enterkeyhint="search" autocomplete="off"{% if not query %} autofocus{% endif %}>
+    <button type="submit">搜尋</button>
+  </form>
+  {% if results %}
+  <div class="scroll"><table class="list">
+    <thead><tr><th>代號</th><th>名稱</th><th>產業</th><th class="std-only">類型</th></tr></thead>
+    <tbody>
+    {% for r in results %}
+      <tr><td class="sym"><a href="/stock/{{ r.symbol }}"><b>{{ r.symbol }}</b></a></td>
+        <td><a href="/stock/{{ r.symbol }}">{{ r.name }}</a></td>
+        <td class="muted">{{ r.industry or '' }}</td>
+        <td class="muted std-only">{{ {'TWSE': '上市', 'TPEX': '上櫃'}.get(r.market, '') }}{{ {'stock': '股票', 'etf': 'ETF', 'other': '其他'}[r.security_type] }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% elif query %}
+  <p class="empty">找不到符合「{{ query }}」的上市證券。可以輸入代號開頭（例：23）或名稱的一部分（例：台積）。</p>
+  {% else %}
+  <p class="empty">輸入代號或名稱開始搜尋。</p>
+  {% endif %}
+</section>
+
+{% if not query %}
+<section class="block" id="recent-box" hidden>
+  <h2 class="h-small">最近看過</h2>
+  <ul class="recent" id="recent"></ul>
+  <p class="small muted">只記在這台裝置上。<button type="button" class="linklike" id="recent-clear">清除</button></p>
+</section>
+<script>
+(function () {
+  var list = [];
+  try { list = JSON.parse(localStorage.getItem('radar-recent') || '[]'); } catch (e) {}
+  if (!list.length) return;
+  var ul = document.getElementById('recent');
+  list.forEach(function (x) {
+    var li = document.createElement('li'), a = document.createElement('a'), b = document.createElement('b');
+    a.href = '/stock/' + encodeURIComponent(x.symbol);
+    b.textContent = x.symbol;
+    a.appendChild(b); a.appendChild(document.createTextNode(' ' + (x.name || '')));
+    li.appendChild(a); ul.appendChild(li);
+  });
+  document.getElementById('recent-box').hidden = false;
+  document.getElementById('recent-clear').addEventListener('click', function () {
+    try { localStorage.removeItem('radar-recent'); } catch (e) {}
+    document.getElementById('recent-box').hidden = true;
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

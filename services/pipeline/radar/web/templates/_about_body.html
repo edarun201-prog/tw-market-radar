@@ -1,0 +1,25 @@
+{% import "_macros.html" as m with context %}
+<section class="block about" id="about" aria-labelledby="about-title">
+  <p class="eyebrow" aria-hidden="true">Method</p>
+  <h1 id="about-title">資料與計算方式</h1>
+  <p class="lead">台股市場雷達每天盤後檢查所有上市股票，找出成交量、價格、法人動向出現異常的股票，並說明原因。
+    {% if latest %}目前最新資料：{{ latest|day }}。{% endif %}訊號引擎 {{ ENGINE_VERSION }}。</p>
+
+  <h2>訊號定義</h2>
+  <div class="scroll"><table class="list defs">
+    <thead><tr><th>訊號</th><th>這是什麼</th><th>判斷條件</th><th class="num">冷卻期</th></tr></thead>
+    <tbody>
+    {% for i in SIGNAL_INFO.values() %}
+      <tr><td class="nowrap">{{ m.dot(i.tone) }}{{ i.label }}{{ m.help(i.type) }}<br><span class="small muted">{{ i.category_label }}</span></td>
+        <td>{{ i.what }}<br><span class="small muted">不代表：{{ i.not_mean }}</span></td>
+        <td>{{ i.rule }}</td>
+        <td class="num">{{ i.cooldown }} 日</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+
+  {% for title, lines in methodology %}
+  <h2>{{ title }}</h2>
+  <ul class="plain-list">{% for line in lines %}<li>{{ line }}</li>{% endfor %}</ul>
+  {% endfor %}
+</section>

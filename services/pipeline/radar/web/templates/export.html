@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{{ day|day }} 盤後｜台股市場雷達{% endblock %}
+{% block content %}
+{# 一個檔案、多個頁面：今日市場、今日雷達、搜尋、每一檔個股、資料與計算方式各是一頁，一次只顯示一頁。
+   第一頁是入口頁（#v-landing）。換頁只靠網址的 #（例：#v-radar、#s-2330）與 CSS :target，不需要 JavaScript——iPhone／iPad 從 LINE、檔案 App 預覽時
+   不會執行程式，也能正常換頁、返回。能執行程式時，另外補上搜尋、記住模式、更新分頁標題。 #}
+<div class="views">
+
+{# 入口頁：打開檔案先看到這一頁（沒有 # 時顯示），「看今天的盤後」進到今日市場 #}
+<section class="view landing default" id="v-landing" data-view="landing" data-title="首頁" aria-labelledby="lp-title">
+{% include "_landing_body.html" %}
+</section>
+
+<div class="view" id="v-market" data-view="home" data-title="今日市場">
+  {% include "_market_body.html" %}
+  <p class="note small">離線快照：{{ generated_at }} 從資料庫匯出，不需要網路或伺服器就能看。收錄 {{ stocks|length }} 檔有訊號的個股頁{% if omitted %}（另有 {{ omitted }} 檔有訊號但沒有收錄）{% endif %}。</p>
+</div>
+
+<div class="view" id="v-radar" data-view="radar" data-title="今日雷達">
+  {% include "_radar_body.html" %}
+</div>
+
+<div class="view" id="v-backtest" data-view="backtest" data-title="訊號回測">
+  {% include "_backtest_body.html" %}
+</div>
+
+<div class="view" id="v-search" data-view="search" data-title="搜尋股票">
+  {# 離線搜尋：索引在下面的 JSON 裡（所有上市證券當天的收盤）。需要執行程式；不能執行時只顯示下面的個股頁清單 #}
+  <section class="block" id="search" aria-labelledby="search-title">
+    <p class="eyebrow" aria-hidden="true">Search</p>
+    <h1 id="search-title">搜尋股票 <span class="muted small">{{ day|day }}</span></h1>
+    <div class="needs-js">
+      <form class="file-search" role="search" id="fs-form">
+        <input id="fq" type="search" placeholder="代號或名稱，例：2330、台積電" aria-label="搜尋股票" enterkeyhint="search" autocomplete="off">
+      </form>
+      <p class="small muted" id="fs-msg" aria-live="polite">可以查這天所有上市股票與 ETF 的收盤和漲跌（共 {{ quotes|length }} 檔）；有個股頁的，點名稱就能打開。</p>
+      <ul class="fs-list" id="fs-list" hidden></ul>
+    </div>
+    <noscript><p class="note">這個檢視器不會執行程式，所以不能搜尋（例：iPhone／iPad 從 LINE 或「檔案」直接預覽）。
+      可以從下面的清單打開個股頁；要搜尋全部上市股票，請用 Safari、Chrome 等瀏覽器打開這個檔案。</p></noscript>
+  </section>
+  <section class="block" aria-labelledby="included-title">
+    <h2 id="included-title" class="h-small">這個檔案收錄的個股頁 <span class="count">{{ stocks|length }} 檔</span></h2>
+    <ul class="recent">
+      {% for st in stocks %}<li><a href="#s-{{ st.s.symbol }}"><b>{{ st.s.symbol }}</b> {{ st.s.name }}</a></li>{% endfor %}
+    </ul>
+  </section>
+</div>
+
+{% for st in stocks %}
+<article class="view stock-section" id="s-{{ st.s.symbol }}" data-view="stock" data-title="{{ st.s.symbol }} {{ st.s.name }}">
+  {% with s=st.s, last=st.last, signals=st.signals, actions=st.actions, price_svg=st.price_svg, flows_svg=st.flows_svg,
+          peers=st.peers, range=st.range, flow_days=st.flow_days, story=st.story %}
+  {% include "_stock_body.html" %}
+  {% endwith %}
+</article>
+{% endfor %}
+
+<div class="view" id="v-about" data-view="about" data-title="資料與計算方式">
+  {% include "_about_body.html" %}
+</div>
+
+</div>
+
+<script type="application/json" id="quote-index">{{ quotes|tojson }}</script>
+<script>
+// ---- 能執行程式時的補強：分頁標題、目前頁面的標示、返回鍵、搜尋分頁直接給游標（換頁本身由 CSS 負責）----
+(function () {
+  var suffix = document.title, moved = false, clicked = false, scrolls = {};
+  function update() {
+    var t = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    var v = (t && t.closest('.view')) || document.querySelector('.view.default');
+    document.querySelectorAll('[data-page]').forEach(function (a) {
+      if (a.dataset.page === v.dataset.view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+    document.title = v.dataset.title + '｜' + suffix;
+  }
+  // 點連結離開一頁時記下捲動位置；用返回鍵回來時放回原處（瀏覽器自己只會跳回連結指到的段落）
+  window.addEventListener('hashchange', function () {
+    moved = true; update();
+    if (!clicked && scrolls[location.hash] != null) window.scrollTo(0, scrolls[location.hash]);
+    clicked = false;
+  });
+  document.addEventListener('DOMContentLoaded', update);   // 分頁列在這段程式之後，載入完再標示目前頁面
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    if (a.hasAttribute('data-back') && moved) { e.preventDefault(); history.back(); return; }   // 從檔案裡的其他頁面來的就回上一頁
+    scrolls[location.hash] = window.scrollY;
+    clicked = a.getAttribute('href') !== location.hash;
+    if (a.dataset.page === 'search') {   // iPhone 要在點擊當下 focus 才會跳出鍵盤，所以這裡先換頁再給游標
+      e.preventDefault();
+      location.hash = 'v-search';
+      document.getElementById('fq').focus({ preventScroll: true });
+    }
+  });
+})();
+
+// ---- 離線搜尋（欄位順序見 export.py 的 quote_index）----
+(function () {
+  var data = JSON.parse(document.getElementById('quote-index').textContent);
+  var input = document.getElementById('fq'), list = document.getElementById('fs-list'), msg = document.getElementById('fs-msg');
+  var hint = msg.textContent, LIMIT = 20;
+  function find(q) {
+    var up = q.toUpperCase(), low = q.toLowerCase();
+    var hits = data.filter(function (r) { return r[0].indexOf(up) === 0 || r[1].toLowerCase().indexOf(low) >= 0; });
+    // 和網站搜尋同樣的順序：代號或名稱完全相同的最前面，其餘照索引（普通股在前、代號短的在前）
+    function rank(r) { return (r[0] === up ? 2 : 0) + (r[1] === q ? 1 : 0); }
+    return hits.map(function (r, i) { return [rank(r), i, r]; })
+               .sort(function (a, b) { return b[0] - a[0] || a[1] - b[1]; })
+               .map(function (x) { return x[2]; });
+  }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function render() {
+    var q = input.value.trim(), hits = q ? find(q) : [];
+    list.textContent = '';
+    list.hidden = !hits.length;
+    if (!q) { msg.textContent = hint; return; }
+    if (!hits.length) { msg.textContent = '找不到符合「' + q + '」的上市證券。可以輸入代號開頭（例：23）或名稱的一部分（例：台積）。'; return; }
+    msg.textContent = hits.length > LIMIT ? '共 ' + hits.length + ' 筆，先列前 ' + LIMIT + ' 筆；多打幾個字可以縮小範圍。' : '共 ' + hits.length + ' 筆';
+    hits.slice(0, LIMIT).forEach(function (r) {
+      var li = el('li'), main = el('div', 'fs-main'), quote = el('div', 'fs-quote');
+      var name = el(r[8] ? 'a' : 'span', 'fs-name');
+      if (r[8]) name.href = '#s-' + r[0];
+      name.appendChild(el('b', '', r[0])); name.appendChild(document.createTextNode(' ' + r[1]));
+      main.appendChild(name);
+      main.appendChild(el('span', 'small muted', [r[2], r[3] === '股票' ? '' : r[3], '成交 ' + r[7]].filter(Boolean).join('・')));
+      if (r[9]) main.appendChild(el('span', 'small', '今日雷達：' + r[9] + (r[8] ? '（點名稱看個股頁）' : '（這個檔案沒有收錄它的個股頁）')));
+      else main.appendChild(el('span', 'small muted', '今天沒有被雷達標記'));
+      quote.appendChild(el('span', 'num', r[4]));
+      quote.appendChild(el('span', 'num small ' + r[6], r[5]));
+      li.appendChild(main); li.appendChild(quote); list.appendChild(li);
+    });
+  }
+  input.addEventListener('input', render);
+  document.getElementById('fs-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var q = input.value.trim(), hits = q ? find(q) : [];
+    if (hits.length && hits[0][8]) location.hash = 's-' + hits[0][0];   // 按 Enter：第一筆有個股頁就直接打開
+    input.blur();
+  });
+})();
+</script>
+{% endblock %}

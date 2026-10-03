@@ -1,0 +1,27 @@
+{# 盤中即時（只在網站上；匯出檔沒有伺服器，不會有即時資料）。
+   只有在即時資料比這一頁的盤後資料新的時候才出現：開盤日 9:00 起到晚上 18:30 盤後資料進來之前。 #}
+{% if not export %}
+<section class="live-panel needs-js" data-live-panel data-day="{{ day.strftime('%Y%m%d') }}"
+         data-live-symbols="{{ live_symbols|default([])|join(',') }}" aria-labelledby="live-title" hidden>
+  <div class="live-head">
+    <h2 id="live-title"><span class="live-dot" aria-hidden="true"></span>盤中即時</h2>
+    <span class="live-status" data-live-status>連線中…</span>
+  </div>
+  <dl class="keyfig">
+    <div><dt>加權指數</dt><dd><b data-live-f="index.price">–</b> <span data-live-f="index.change_pct" data-live-tone="index">–</span></dd></div>
+    <div><dt>漲跌點數</dt><dd data-live-f="index.change" data-live-tone="index">–</dd></div>
+    <div><dt>櫃買指數</dt><dd><b data-live-f="otc.price">–</b> <span data-live-f="otc.change_pct" data-live-tone="otc">–</span></dd></div>
+    <div><dt>盤中成交金額</dt><dd data-live-f="market.turnover">–</dd></div>
+  </dl>
+  {% if live_symbols %}
+  <details class="live-list">
+    <summary>{{ day.strftime('%m/%d') }} 盤後被雷達標記的股票，今天盤中怎麼走 <span class="muted small">{{ live_symbols|length }} 檔</span></summary>
+    <div class="scroll"><table class="list">
+      <thead><tr><th>股票</th><th class="num">成交價</th><th class="num">今天漲跌</th><th class="num std-only">成交量</th></tr></thead>
+      <tbody data-live-table></tbody>
+    </table></div>
+  </details>
+  {% endif %}
+  <p class="small muted">資料：臺灣證券交易所基本市況報導，開盤時間每 15 秒更新。盤中數字只供自己參考；收盤後以晚上 18:30 更新的盤後資料為準。</p>
+</section>
+{% endif %}

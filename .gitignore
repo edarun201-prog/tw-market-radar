@@ -1,35 +1,26 @@
-# Gradle files
-.gradle/
-build/
-.kotlin/
+# 本機設定與金鑰（只放 .env.example）
+.env
 
-# Local configuration file (sdk path, etc)
-local.properties
-
-# Log/OS Files
+# 資料：原始回應、匯出的 HTML、紀錄檔都不進版本控制（證交所／櫃買中心的資料請自行抓取）
+data/raw/*
+!data/raw/.gitkeep
+data/logs/
+data/exports/
 *.log
+*.tmp
 
-# Android Studio generated files and folders
-captures/
-.externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
 
-# IntelliJ
-*.iml
+# 前端（保留給之後可能的前端專案）
+node_modules/
+.next/
+
+# 編輯器與系統
 .idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
-
-# Keystore files
-*.jks
-*.keystore
-
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
-# Android Profiling
-*.hprof
+.vscode/
+Thumbs.db
+.DS_Store

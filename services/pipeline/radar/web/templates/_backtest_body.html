@@ -1,0 +1,93 @@
+{% import "_macros.html" as m with context %}
+{% set p = bt.period %}
+{# 訊號回測：新手看一句話、標準看一張表、進階看完整數字、市面說法對照與限制。只描述過去，不代表之後。 #}
+<section class="page-head" aria-labelledby="bt-title">
+  <div class="title"><p class="eyebrow" aria-hidden="true">Backtest</p><h1 id="bt-title">訊號回測</h1></div>
+  <p class="lead">用過去的資料回頭看：每種訊號出現之後，股價實際怎麼走，並和同一天的全部股票比較。</p>
+  <p class="small muted">{% if p.start %}資料：{{ p.start.strftime('%Y/%m/%d') }}～{{ p.end.strftime('%Y/%m/%d') }} 出現、已經滿 20 個交易日的 {{ '{:,}'.format(p.n) }} 筆訊號；報酬已還原除權息。{% else %}還沒有滿 20 個交易日的訊號。{% endif %}</p>
+  <p class="note">這些是過去一段期間的統計，不代表之後的走勢，也不是買賣建議。</p>
+</section>
+
+{# 新手：每種訊號一句話 #}
+<section class="block beg-only" aria-labelledby="bt-beg">
+  <h2 id="bt-beg">每種訊號，過去之後表現如何？</h2>
+  <p class="small muted">「上漲比例」是 20 個交易日後，股價比訊號那天高的股票占多少；「全部股票」是同一天所有上市股票，等於「隨便挑」的結果。</p>
+  <ul class="bt-list">
+    {% for t in bt.types %}
+    <li>
+      <div class="bt-head">{{ m.dot(t.info.tone) }}<b>{{ t.info.label }}</b>{{ m.help(t.info.type) }}<span class="verdict {{ t.verdict.tone }}">{{ t.verdict.label }}</span></div>
+      <p>{{ t.sentence }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="small muted">「好一些」只代表過去這段期間比較好，不代表之後也會這樣。想看完整數字與限制，右上角切換到「進階」。</p>
+</section>
+
+{# 標準：20 個交易日後的一張表 #}
+<section class="block std-only" aria-labelledby="bt-std">
+  <h2 id="bt-std">20 個交易日後 <span class="muted small">和同一天全部股票比較</span></h2>
+  <div class="scroll"><table class="list">
+    <thead><tr><th>訊號</th><th class="num">筆數</th><th class="num">上漲比例</th><th class="num">全部股票</th><th class="num">中位數</th><th class="num">全部股票</th><th>對照</th></tr></thead>
+    <tbody>
+    {% for t in bt.types %}{% set s = t.h.h20 %}
+      <tr>
+        <td class="nowrap">{{ m.dot(t.info.tone) }}{{ t.info.label }}</td>
+        {% if s %}
+        <td class="num">{{ '{:,}'.format(s.n) }}</td><td class="num">{{ s.win|share }}</td><td class="num muted">{{ s.base_win|share }}</td>
+        <td class="num {{ s.median|tone }}">{{ s.median|ret }}</td><td class="num muted">{{ s.base_median|ret }}</td>
+        {% else %}<td class="num">0</td><td class="muted" colspan="4">還沒有資料</td>{% endif %}
+        <td class="nowrap"><span class="verdict {{ t.verdict.tone }}">{{ t.verdict.label }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{# 進階：市面說法對照、完整數字、限制 #}
+<section class="block adv-only" aria-labelledby="bt-myth">
+  <h2 id="bt-myth">市面說法 vs 資料</h2>
+  <p class="small muted">引號裡是常聽到的說法，不是這個網站的判斷；下面用這段期間的實際資料對照。</p>
+  <div class="myths">
+    {% for x in bt.myths %}
+    <article class="myth">
+      <div class="myth-head"><span class="eyebrow-sm">{{ x.label }}</span><span class="verdict-pill">{{ x.verdict }}</span></div>
+      <p class="myth-claim">「{{ x.claim }}」</p>
+      <p>{{ x.finding }}</p>
+      <ul>{% for pt in x.points %}<li>{{ pt }}</li>{% endfor %}</ul>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="block adv-only" aria-labelledby="bt-full">
+  <h2 id="bt-full">完整數字 <span class="muted small">點開不同的持有天數</span></h2>
+  <p class="small muted">扣成本：報酬超過一買一賣成本（約 {{ '%.2f'|format(bt.cost * 100) }}%）的比例。中間一半：第 25 到第 75 百分位。
+    比等權平均：每一筆減掉同一天全部股票的平均報酬後再平均；個股報酬的分布偏向少數大漲，所以平均常比中位數高。</p>
+  {% for hk, hl in bt.horizons.items() %}
+  <details class="bt-h"{% if hk == 'h20' %} open{% endif %}>
+    <summary>{{ hl }}</summary>
+    <div class="scroll"><table class="list">
+      <thead><tr><th>訊號</th><th class="num">筆數</th><th class="num">上漲</th><th class="num">扣成本</th><th class="num">全部股票</th>
+        <th class="num">平均</th><th class="num">中位數</th><th class="num">中間一半</th><th class="num">比等權平均</th></tr></thead>
+      <tbody>
+      {% for t in bt.types %}{% set s = t.h[hk] %}
+        <tr>
+          <td class="nowrap">{{ m.dot(t.info.tone) }}{{ t.info.label }}</td>
+          {% if s %}
+          <td class="num">{{ '{:,}'.format(s.n) }}</td><td class="num">{{ s.win|share }}</td><td class="num">{{ s.win_cost|share }}</td>
+          <td class="num muted">{{ s.base_win|share }}</td>
+          <td class="num {{ s.mean|tone }}">{{ s.mean|ret }}</td><td class="num {{ s.median|tone }}">{{ s.median|ret }}</td>
+          <td class="num">{{ s.p25|ret }} ～ {{ s.p75|ret }}</td><td class="num {{ s.excess_mean|tone }}">{{ s.excess_mean|ret }}</td>
+          {% else %}<td class="num">0</td><td class="muted" colspan="7">還沒有資料</td>{% endif %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </details>
+  {% endfor %}
+</section>
+
+<section class="block adv-only" aria-labelledby="bt-limits">
+  <h2 id="bt-limits">回測沒那麼簡單的地方</h2>
+  <ul class="plain-list">{% for c in bt.caveats %}<li>{{ c }}</li>{% endfor %}</ul>
+</section>

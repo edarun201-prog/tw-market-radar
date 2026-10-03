@@ -1,0 +1,126 @@
+{% import "_macros.html" as m with context %}
+{% set i = ov.index %}{% set b = ov.breadth %}
+{# 入口頁：全螢幕影片背景、點陣字標題、數字跳動的當日統計。放在 <section class="landing"> 裡（網站 / 與匯出檔的第一頁共用）。
+   換頁與選單不需要程式（選單是 <details>）；能執行程式時才有數字跳動與選單的關閉方式（點背景、Esc）。 #}
+{% set stats = [
+  {'glyph': '#', 'value': i.close|float if i else none, 'decimals': 2,
+   'label': '加權指數 ' ~ (i.change_pct|pct if i else '')},
+  {'glyph': '+', 'value': b.advancers if b else none, 'decimals': 0, 'label': '上漲家數'},
+  {'glyph': '-', 'value': b.decliners if b else none, 'decimals': 0, 'label': '下跌家數'},
+  {'glyph': '*', 'value': total, 'decimals': 0, 'label': '今日雷達訊號'},
+] %}
+<div class="lp-bg" aria-hidden="true">
+  <video class="lp-video" autoplay muted loop playsinline>
+    <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4" type="video/mp4">
+  </video>
+</div>
+
+<div class="lp-page">
+  <header class="lp-header">
+    <a class="lp-logo" href="{{ m.page_href('landing') }}" aria-label="台股市場雷達首頁">
+      <img src="{{ icon_uri if export else '/static/icon.svg' }}" alt="" width="52" height="52">
+    </a>
+    <nav class="lp-nav" aria-label="主要頁面">
+      <a href="{{ m.page_href('home') }}">今日市場</a>
+      <a href="{{ m.page_href('radar') }}">今日雷達</a>
+      <a href="{{ m.page_href('backtest') }}">回測</a>
+      <a href="{{ m.page_href('search') }}">搜尋</a>
+      <a href="{{ m.page_href('about') }}">說明</a>
+    </nav>
+    <a class="lp-signin" href="{{ m.page_href('home') }}">開始</a>
+
+    {# 手機版選單：<details> 不需要程式就能開關 #}
+    <details class="lp-menu">
+      <summary class="lp-burger" aria-label="選單"><span></span><span></span><span></span></summary>
+      <div class="lp-overlay"></div>
+      <nav class="lp-sheet" aria-label="主要頁面">
+        <a href="{{ m.page_href('home') }}">今日市場</a>
+        <a href="{{ m.page_href('radar') }}">今日雷達</a>
+        <a href="{{ m.page_href('backtest') }}">訊號回測</a>
+        <a href="{{ m.page_href('search') }}">搜尋</a>
+        <a href="{{ m.page_href('about') }}">說明</a>
+        <a class="lp-sheet-cta" href="{{ m.page_href('home') }}">開始</a>
+      </nav>
+    </details>
+  </header>
+
+  <div class="lp-hero">
+    {% if not export %}
+    {# 盤中即時：開盤日有比盤後資料新的行情時才出現 #}
+    <a class="lp-live needs-js" href="{{ m.page_href('home') }}" data-live-panel data-day="{{ day.strftime('%Y%m%d') }}" hidden>
+      <span class="live-dot" aria-hidden="true"></span><span data-live-status>盤中</span>
+      <span>加權指數 <b data-live-f="index.price">–</b></span><span data-live-f="index.change_pct" data-live-tone="index">–</span>
+    </a>
+    {% endif %}
+    <div class="lp-trust lp-anim" style="--d: 0.05s">
+      <span class="lp-avatar a1"><span><i class="fa-solid fa-building-columns" aria-hidden="true"></i></span></span>
+      <span class="lp-avatar a2"><span><i class="fa-solid fa-database" aria-hidden="true"></i></span></span>
+      <span class="lp-avatar a3"><span><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span></span>
+      <span class="lp-trust-pill">資料來源：臺灣證券交易所・{{ day.strftime('%m/%d') }} 盤後</span>
+    </div>
+    <h1 class="lp-headline" id="lp-title" aria-label="台股市場雷達 Taiwan Stock Intelligence Radar">
+      <span>Taiwan Stock</span>
+      <span>Intelligence Radar</span>
+    </h1>
+    <p class="lp-sub lp-anim" style="--d: 0.28s">台股市場雷達每天盤後整理大盤與異常訊號，說明發生了什麼。只描述資料，不預測股價，也不提供買賣建議。</p>
+    <div class="lp-cta-wrap lp-anim-pulse" style="--d: 0.4s">
+      <a class="lp-cta" href="{{ m.page_href('home') }}">看今天的盤後</a>
+    </div>
+  </div>
+
+  {# 沒有程式時直接顯示最後的數字；有程式時從 0 跳到這個數字 #}
+  <ul class="lp-stats" aria-label="{{ day|day }} 盤後">
+    {% for s in stats %}
+    <li class="lp-stat lp-anim" style="--d: {{ '%.2f'|format(0.5 + 0.08 * loop.index0) }}s">
+      <span class="lp-stat-icon" aria-hidden="true">{{ s.glyph }}</span>
+      <span class="lp-stat-value"{% if s.value is not none %} data-target="{{ s.value }}" data-decimals="{{ s.decimals }}"{% endif %}>
+        {%- if s.value is none %}–{% elif s.decimals %}{{ '{:,.2f}'.format(s.value) }}{% else %}{{ '{:,}'.format(s.value) }}{% endif -%}
+      </span>
+      <span class="lp-stat-label">{{ s.label }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+
+<script>
+(function () {
+  var root = document.currentScript.closest('.landing');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // 數字跳動：easeOutCubic，第 i 個延後 480 + 90i ms、歷時 1500 + 80i ms；看得到統計列（25%）時只跑一次
+  function fmt(n, d) { return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  var values = [].slice.call(root.querySelectorAll('.lp-stat-value[data-target]'));
+  function run() {
+    values.forEach(function (el, i) {
+      var target = parseFloat(el.dataset.target), d = parseInt(el.dataset.decimals, 10) || 0;
+      var dur = 1500 + i * 80, delay = 480 + i * 90;
+      el.textContent = fmt(0, d);
+      setTimeout(function () {
+        var t0 = null;
+        requestAnimationFrame(function step(t) {
+          if (t0 === null) t0 = t;
+          var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+          el.textContent = fmt(target * e, d);
+          if (p < 1) requestAnimationFrame(step); else el.textContent = fmt(target, d);
+        });
+      }, delay);
+    });
+  }
+  if (!reduce && values.length && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) { io.disconnect(); run(); }
+    }, { threshold: 0.25 });
+    io.observe(root.querySelector('.lp-stats'));
+  }
+
+  // 手機選單：點背景、按 Esc、點連結、視窗變寬（> 720px）時關閉
+  var menu = root.querySelector('.lp-menu'), burger = menu.querySelector('summary');
+  function sync() { burger.setAttribute('aria-expanded', String(menu.open)); document.body.classList.toggle('menu-open', menu.open); }
+  function close() { menu.open = false; }
+  menu.addEventListener('toggle', sync); sync();
+  root.querySelector('.lp-overlay').addEventListener('click', close);
+  menu.querySelectorAll('.lp-sheet a').forEach(function (a) { a.addEventListener('click', close); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu.open) { close(); burger.focus(); } });
+  window.addEventListener('resize', function () { if (window.innerWidth > 720 && menu.open) close(); });
+})();
+</script>

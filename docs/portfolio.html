@@ -1,0 +1,659 @@
+<title>台股市場雷達</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Doto:wght@700&display=swap">
+<style>
+:root{
+  --bg:#F2F4F3; --surface:#FFFFFF; --sunken:#E8ECEA; --ink:#15201C; --muted:#5B6863; --line:#D5DCD9;
+  --accent:#1D4E89; --accent-soft:#E3ECF6; --up:#C8322F; --down:#17875A; --warn:#9A6414; --warn-soft:#FBF1DF;
+  --done:#17875A; --done-soft:#E1F2EA;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --serif:"Noto Serif TC","PMingLiU",serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F1513; --surface:#172019; --sunken:#1D2724; --ink:#E6ECE9; --muted:#93A19B; --line:#2B3632;
+    --accent:#86B4EA; --accent-soft:#1A2A3D; --up:#F0625E; --down:#43C28A; --warn:#E3AC52; --warn-soft:#33270F;
+    --done:#43C28A; --done-soft:#14301F;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F1513; --surface:#172019; --sunken:#1D2724; --ink:#E6ECE9; --muted:#93A19B; --line:#2B3632;
+  --accent:#86B4EA; --accent-soft:#1A2A3D; --up:#F0625E; --down:#43C28A; --warn:#E3AC52; --warn-soft:#33270F;
+  --done:#43C28A; --done-soft:#14301F;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;margin:0}
+.wrap{max-width:1000px;margin:0 auto;padding-inline:20px;padding-block:0 80px}
+a{color:var(--accent)}
+h1,h2,h3{text-wrap:balance;margin:0;line-height:1.3}
+h2{font-family:var(--serif);font-weight:700;font-size:26px}
+h3{font-size:16px;font-weight:700}
+p{margin:0}
+.mono,code{font-family:var(--mono);font-size:.88em}
+code{background:var(--sunken);padding:1px 6px;border-radius:4px}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted);font-weight:500}
+.tab{font-variant-numeric:tabular-nums}
+
+/* nav */
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav.top .in{max-width:1000px;margin:0 auto;padding-inline:20px;display:flex;gap:22px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+nav.top a{color:var(--muted);text-decoration:none;font-size:13px;padding-block:12px;border-bottom:2px solid transparent}
+nav.top a:hover,nav.top a:focus-visible{color:var(--ink);border-bottom-color:var(--accent);outline:none}
+
+section{padding-top:64px;display:grid;gap:20px}
+.lead{color:var(--muted);max-width:62ch}
+
+/* hero */
+.hero{padding-top:56px;display:grid;grid-template-columns:1fr auto;gap:28px;align-items:center}
+.hero h1{font-family:var(--serif);font-weight:900;font-size:clamp(38px,6vw,56px);letter-spacing:.02em}
+.hero .en{font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:6px}
+.hero p.pitch{margin-top:18px;font-size:17px;max-width:40ch}
+.scope{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:32px;grid-column:1/-1}
+.scope div{background:var(--surface);padding:14px 16px}
+.scope dt{font-size:12px;color:var(--muted);letter-spacing:.08em}
+.scope dd{margin:2px 0 0;font-weight:500}
+.radar{width:150px;height:150px}
+.radar circle,.radar line{fill:none;stroke:var(--line);stroke-width:1}
+.radar .sweep{fill:var(--accent);opacity:.18;transform-origin:75px 75px;animation:spin 5s linear infinite}
+.radar .blip{fill:var(--up)} .radar .blip.g{fill:var(--down)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.radar .sweep{animation:none}}
+
+/* mock */
+.mock{--surface:#0d0d0e;--sunken:#19191b;--line:rgba(255,255,255,.12);--muted:#8e8e8e;--ink:#fff;--accent:#7ea8ff;--accent-soft:#19191b;--up:#F0625E;--down:#43C28A;--done-soft:rgba(67,194,138,.14);--mono:"Inter",system-ui,sans-serif;background:#000;color:#fff;border:1px solid rgba(0,0,0,.2);border-radius:18px;overflow:hidden;font-family:"Inter",var(--sans)}
+.mock .eyebrow{color:#fff}
+.dotm{font-family:"Doto",var(--mono);font-weight:700;letter-spacing:-.02em}
+.m-logo{width:30px;height:30px;border-radius:50%;background:#fff;display:inline-grid;place-items:center;flex:none}
+.m-logo::after{content:"";width:14px;height:14px;border-radius:50%;border:2px solid #1D4E89;box-shadow:inset 0 0 0 3px #fff,inset 0 0 0 5px #1D4E89}
+.m-nav{display:flex;gap:4px;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;color:#2e2e2e}
+.m-nav span,.m-nav b{padding:2px 6px;opacity:.5;font-weight:500;position:relative}
+.m-nav b{opacity:1}
+.m-nav b::after{content:"";position:absolute;left:50%;bottom:-2px;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:#000;box-shadow:-5px 0 0 #000,5px 0 0 #000}
+.m-mode{display:flex;gap:2px;background:#28282a;border-radius:999px;padding:3px;font-size:12px;color:#c8c8c8}
+.m-mode span,.m-mode b{padding:2px 9px;border-radius:999px;font-weight:500}
+.m-mode b{background:#fff;color:#000}
+.mock-bar{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line);background:#000;font-size:13px;color:var(--muted)}
+.stamp{color:var(--warn);background:var(--warn-soft);padding:1px 8px;border-radius:4px;font-size:12px;font-weight:500}
+.mock-body{display:grid;grid-template-columns:1.05fr 1fr;gap:0}
+.mock-body>div{padding:18px 20px}
+.mock-body>div+div{border-left:1px solid var(--line)}
+.idx{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.idx .v{font-family:var(--mono);font-size:30px;font-weight:500}
+.up{color:var(--up)} .dn{color:var(--down)}
+.breadth{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:12px;background:var(--sunken)}
+.breadth span{display:block}
+.breadth-legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.sig-list{list-style:none;margin:14px 0 0;padding:0;display:grid}
+.sig-list li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.chip{font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap;font-weight:500}
+.chip.vol{color:var(--accent)} .chip.hi{color:var(--up)} .chip.lo{color:var(--down)} .chip.fl{color:var(--warn)}
+.sig-list .ev{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-align:right}
+.ai{background:var(--accent-soft);border-radius:8px;padding:14px 16px;font-size:14px;display:grid;gap:8px}
+.ai .who{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.08em}
+.ai .disc{font-size:12px;color:var(--muted)}
+.state{display:flex;gap:10px;align-items:flex-start;margin-top:10px;font-size:14px}
+.state b{flex:none;font-size:12.5px;padding:2px 10px;border-radius:6px;border:1px solid var(--down);color:var(--down);background:var(--done-soft)}
+.keyfig{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:14px 0 0}
+.keyfig div{border-top:1px solid var(--line);padding-top:6px}
+.keyfig dt{font-size:12px;color:var(--muted)} .keyfig dd{margin:0;font-family:var(--mono);font-size:17px}
+.cat{font-size:12px;color:var(--muted);margin:12px 0 2px}
+.rrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.rrow .n{font-family:var(--mono);font-weight:700} .rrow.zero{color:var(--muted)} .rrow.zero .n{font-weight:400}
+.rrow i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.rsub{font-size:12.5px;color:var(--muted);padding:2px 0 8px 16px;display:grid;gap:3px}
+.tabbar-mock{display:flex;justify-content:space-around;border-top:1px solid var(--line);background:var(--sunken);font-size:12px;color:var(--muted);padding:8px 0}
+.tabbar-mock b{color:var(--accent)}
+.mnav{display:flex;gap:14px;flex-wrap:wrap} .mnav b{color:var(--accent)}
+.rwd{display:grid;grid-template-columns:1.3fr 1fr .8fr;gap:12px;align-items:stretch}
+.myths{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.myths article{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.myths p{font-size:14px;color:var(--muted)}
+.rwd>div{background:var(--surface);border:1px solid var(--line);border-radius:10px;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}
+.rwd .w{font-family:var(--mono);font-size:12px;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--line);background:var(--sunken);display:flex;justify-content:space-between;gap:8px}
+.rwd .w b{color:var(--ink);font-family:var(--sans)}
+.rwd p{font-size:13px;color:var(--muted);padding:10px 12px}
+.rwd .bar{font-size:11.5px;color:var(--muted);padding:6px 12px;display:flex;gap:10px;flex-wrap:wrap}
+.rwd .bar b{color:var(--accent)}
+.rwd .top{border-bottom:1px solid var(--line)} .rwd .bottom{border-top:1px solid var(--line);justify-content:space-around;background:var(--sunken)}
+
+/* diagram */
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+.diagram svg{display:block;min-width:760px;width:100%;height:auto}
+.n-done rect{fill:var(--done-soft);stroke:var(--done);stroke-width:1.5}
+.n-plan rect{fill:var(--surface);stroke:var(--muted);stroke-width:1.2;stroke-dasharray:5 4}
+.n-raw rect{fill:var(--sunken);stroke:var(--line);stroke-width:1}
+.diagram text{fill:var(--ink);font-family:var(--sans)}
+.diagram .t{font-size:15px;font-weight:700}
+.diagram .s{font-size:11.5px;fill:var(--muted);font-family:var(--mono)}
+.diagram .lbl{font-size:11.5px;fill:var(--muted)}
+.ar{stroke:var(--ink);stroke-width:1.4;fill:none}
+.ar.d{stroke:var(--muted);stroke-dasharray:4 4}
+.legend{display:flex;gap:18px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+/* decisions */
+.decisions{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-top:1px solid var(--line)}
+.decisions article{padding:18px 0;border-bottom:1px solid var(--line);display:grid;gap:6px;align-content:start}
+.decisions article:nth-child(odd){padding-right:28px}
+.decisions article:nth-child(even){padding-left:28px;border-left:1px solid var(--line)}
+.decisions .where{font-family:var(--mono);font-size:12px;color:var(--accent)}
+.decisions p{color:var(--muted);font-size:14px}
+
+/* tables */
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:620px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.06em;background:var(--sunken)}
+tr:last-child td{border-bottom:0}
+td .mono{white-space:nowrap}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:4px;white-space:nowrap;font-weight:500}
+.pill.ok{background:var(--done-soft);color:var(--done)}
+.pill.wait{background:var(--warn-soft);color:var(--warn)}
+.pill.no{background:var(--sunken);color:var(--muted)}
+
+/* roadmap */
+.progress{display:grid;gap:8px}
+.progress .bar{height:10px;border-radius:5px;background:var(--sunken);overflow:hidden}
+.progress .bar span{display:block;height:100%;background:var(--done);transition:width .3s}
+.progress .row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);gap:12px;flex-wrap:wrap}
+.steps{display:grid;gap:10px}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.step summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:44px 1fr auto;gap:14px;align-items:center;padding:14px 16px}
+.step summary::-webkit-details-marker{display:none}
+.step summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:10px}
+.step .num{font-family:var(--mono);font-size:22px;font-weight:500;color:var(--muted);text-align:center}
+.step.is-next{border-color:var(--accent)}
+.step.is-next .num{color:var(--accent)}
+.step .ttl{display:grid}
+.step .ttl small{color:var(--muted);font-size:13px}
+.step .right{display:flex;gap:10px;align-items:center}
+.step .cnt{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.step .body{padding:0 16px 16px 74px;display:grid;gap:10px}
+.step .dod{font-size:13px;color:var(--muted);border-left:2px solid var(--line);padding-left:10px}
+.tasks{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.tasks label{display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;padding:3px 0}
+.tasks input{margin-top:5px;accent-color:var(--done);width:15px;height:15px;flex:none}
+.tasks input:checked+span{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.reset{justify-self:start;background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:4px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.reset:hover{color:var(--ink)}
+
+/* risks */
+.risks{display:grid;gap:0;border-top:1px solid var(--line)}
+.risks div{display:grid;grid-template-columns:120px 1fr;gap:18px;padding:14px 0;border-bottom:1px solid var(--line)}
+.risks b{font-weight:700}
+.risks p{color:var(--muted);font-size:14px}
+.sev{font-size:12px;font-weight:700;letter-spacing:.06em}
+.sev.h{color:var(--up)} .sev.m{color:var(--warn)} .sev.l{color:var(--muted)}
+
+.cmds{display:grid;gap:10px;counter-reset:c}
+.cmd{display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:start}
+.cmd .k{font-family:var(--mono);color:var(--accent);font-weight:500;padding-top:10px}
+.cmd pre{margin:0;background:var(--sunken);border-radius:8px;padding:10px 14px;overflow-x:auto;font-family:var(--mono);font-size:13px}
+.cmd p{font-size:13px;color:var(--muted);margin-top:4px}
+footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+
+@media (max-width:760px){
+  .hero{grid-template-columns:1fr}
+  .radar{display:none}
+  .scope{grid-template-columns:repeat(2,1fr)}
+  .mock-body{grid-template-columns:1fr}
+  .rwd{grid-template-columns:1fr}
+  .myths{grid-template-columns:1fr}
+  .mock-body>div+div{border-left:0;border-top:1px solid var(--line)}
+  .decisions{grid-template-columns:1fr}
+  .decisions article:nth-child(odd),.decisions article:nth-child(even){padding-inline:0;border-left:0}
+  .step .body{padding-left:16px}
+  .risks div{grid-template-columns:1fr;gap:4px}
+}
+</style>
+
+<nav class="top" aria-label="章節">
+  <div class="in">
+    <a href="#preview">成品示意</a>
+    <a href="#flow">資料流</a>
+    <a href="#decisions">設計決策</a>
+    <a href="#model">資料模型</a>
+    <a href="#signals">訊號</a>
+    <a href="#backtest">回測</a>
+    <a href="#env">執行環境</a>
+    <a href="#roadmap">路線圖</a>
+    <a href="#risks">風險</a>
+    <a href="#next">本週要做</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <div>
+    <div class="eyebrow">個人作品 · 開發中</div>
+    <h1>台股市場雷達</h1>
+    <div class="en">Taiwan Stock Intelligence Radar</div>
+    <p class="pitch">每天收盤後自動抓證交所官方資料，找出量價與法人的異常，再用白話解讀。只描述發生了什麼，不提供買賣建議。</p>
+  </div>
+  <svg class="radar" viewBox="0 0 150 150" aria-hidden="true">
+    <circle cx="75" cy="75" r="72"/><circle cx="75" cy="75" r="48"/><circle cx="75" cy="75" r="24"/>
+    <line x1="3" y1="75" x2="147" y2="75"/><line x1="75" y1="3" x2="75" y2="147"/>
+    <path class="sweep" d="M75 75 L75 3 A72 72 0 0 1 137 39 Z"/>
+    <circle class="blip" cx="104" cy="44" r="3.5"/><circle class="blip g" cx="46" cy="98" r="3"/><circle class="blip" cx="112" cy="104" r="2.5"/>
+  </svg>
+  <dl class="scope">
+    <div><dt>範圍</dt><dd>上市＋上櫃 盤後</dd></div>
+    <div><dt>架構</dt><dd>Python ＋ PostgreSQL</dd></div>
+    <div><dt>進度</dt><dd class="tab">每日自動更新中</dd></div>
+    <div><dt>目前程式</dt><dd class="tab">約 4,900 行 Python · 96 項測試</dd></div>
+  </dl>
+</header>
+
+<!-- 1 -->
+<section id="preview">
+  <div class="eyebrow">完成後的樣子</div>
+  <h2>先看大盤，再看雷達抓到什麼</h2>
+  <p class="lead">網站已經完成，執行 <code>python -m radar web</code> 就能在本機打開。閱讀順序固定：今日市場 → 今日雷達（先看分類和數量，點開才看股票）→ 個股「為什麼被雷達注意」→ 詳細資料。打開先是一頁全螢幕影片背景的入口頁（點陣字標題、當日數字跳動），進去之後的每一頁都是同一套黑底、白色膠囊導覽的風格。有新手、標準、進階三種模式，名詞都有「是什麼／代表什麼／不代表什麼」的說明；網頁是多頁式的：今日市場、今日雷達、搜尋、個股、說明各是一頁，傳出去的 HTML 檔也一樣；也是響應式的：桌面、平板、手機同一份功能，只是導覽的位置不同；手機上還可以安裝成 App、離線看過的頁面。這裡的數字與股名是示意；實際網站用的是資料庫裡的真實盤後資料。台股慣例紅漲綠跌，不分多空的訊號用藍色。</p>
+  <div class="mock" role="img" aria-label="首頁示意畫面">
+    <div class="mock-bar"><span class="m-logo" aria-hidden="true"></span><span class="m-nav"><b>今日市場</b><span>今日雷達</span><span>訊號回測</span><span>搜尋股票</span><span>說明</span></span><span class="m-mode"><span>新手</span><b>標準</b><span>進階</span></span><span class="stamp">示意資料，非真實行情</span></div>
+    <div class="mock-body">
+      <div>
+        <div class="dotm" style="font-size:22px">Market</div>
+        <div class="eyebrow">今日市場</div>
+        <div class="state"><b>偏弱</b><span>下跌家數多於上漲家數，加權指數也下跌 0.41%，市場整體偏弱。</span></div>
+        <dl class="keyfig tab">
+          <div><dt>加權指數</dt><dd>23,418.62 <span class="dn">−0.41%</span></dd></div>
+          <div><dt>成交金額</dt><dd>4,812.3 億</dd></div>
+          <div><dt>上漲家數</dt><dd class="up">341</dd></div>
+          <div><dt>下跌家數</dt><dd class="dn">612</dd></div>
+        </dl>
+        <div class="ai" style="margin-top:18px">
+          <div class="who">盤後摘要</div>
+          <p>下跌家數約為上漲的 1.8 倍，成交金額比近 20 日平均少 12%。量能爆增的 12 檔中有 7 檔屬半導體業；雷達共標記 38 個訊號，外資連買 6 則。</p>
+          <p class="disc">只根據當日資料庫中的數字，不構成投資建議。</p>
+        </div>
+      </div>
+      <div>
+        <div class="eyebrow">今日雷達 · 38 個訊號 · 看全部 ›</div>
+        <div class="cat">成交量 · 12</div>
+        <div class="rrow"><i style="background:var(--accent)"></i><span>量能爆增 ›</span><span class="n">12</span></div>
+        <div class="cat">價格 · 15</div>
+        <div class="rrow"><i style="background:var(--up)"></i><span>創 60 日新高</span><span class="n">9</span></div>
+        <div class="rrow"><i style="background:var(--down)"></i><span>創 60 日新低</span><span class="n">2</span></div>
+        <div class="rrow"><i style="background:var(--up)"></i><span>5 日急漲</span><span class="n">4</span></div>
+        <div class="rrow zero"><i style="background:var(--down)"></i><span>5 日急跌</span><span class="n">0</span></div>
+        <div class="cat">法人動向 · 11</div>
+        <div class="rrow"><i style="background:var(--up)"></i><span>外資連買</span><span class="n">6</span></div>
+        <div class="rrow"><i style="background:var(--down)"></i><span>外資連賣</span><span class="n">3</span></div>
+        <div class="rrow"><i style="background:var(--up)"></i><span>投信大買</span><span class="n">2</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="rwd" role="img" aria-label="同一組導覽在三種寬度的位置：桌面與平板在上方，手機在底部">
+    <div><div class="w"><b>桌面</b><span>1280 px</span></div>
+      <p>上方導覽列切換頁面；今日雷達頁左邊是各類訊號，右邊是市場熱點（標準模式）。頁首保留一個搜尋框當捷徑。</p>
+      <div class="bar top"><b>今日市場</b><span>今日雷達</span><span>訊號回測</span><span>搜尋股票</span><span>說明</span></div></div>
+    <div><div class="w"><b>平板</b><span>768 px</span></div>
+      <p>同一組導覽，內容改成單欄。頁首折成兩行時，頁內跳轉會依頁首實際高度避開。</p>
+      <div class="bar top"><b>今日市場</b><span>今日雷達</span><span>訊號回測</span><span>搜尋股票</span><span>說明</span></div></div>
+    <div><div class="w"><b>手機</b><span>375 px</span></div>
+      <p>同一組項目移到底部分頁列，可以安裝成 App。</p>
+      <div class="bar bottom"><b>市場</b><span>雷達</span><span>回測</span><span>搜尋</span><span>說明</span></div></div>
+  </div>
+  <p class="lead">三種寬度都實測過：沒有橫向捲動，捲動時上方與底部亮起的項目同步。導覽項目只定義一次，測試會檢查桌面與手機的連結完全相同。</p>
+</section>
+
+<!-- 2 -->
+<section id="flow">
+  <div class="eyebrow">架構</div>
+  <h2>從官方報表到一句白話</h2>
+  <p class="lead">上排是資料管線，下排是分析與呈現，全部都已完成並有測試。原始回應全部存成檔案，改了解析規則可以直接重算，不用再向證交所發請求。</p>
+  <div class="diagram">
+    <svg viewBox="0 0 1000 330" role="img" aria-label="資料流程圖：TWSE 經 Adapter、Normalizer、Validator 寫入 PostgreSQL，再經特徵、訊號、API 到網站與 AI">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--ink)"/></marker>
+        <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--muted)"/></marker>
+      </defs>
+      <!-- raw store -->
+      <g class="n-raw"><rect x="312" y="8" width="150" height="48" rx="8"/></g>
+      <text class="t" x="387" y="30" text-anchor="middle" style="font-size:13.5px">data/raw</text>
+      <text class="s" x="387" y="47" text-anchor="middle">*.json.gz</text>
+      <path class="ar d" d="M290 110 C290 80 320 60 340 57" marker-end="url(#ahm)"/>
+      <path class="ar d" d="M434 57 C455 62 485 80 485 108" marker-end="url(#ahm)"/>
+      <text class="lbl" x="256" y="78" text-anchor="end">存原始檔</text>
+      <text class="lbl" x="500" y="78">reprocess</text>
+
+      <!-- row 1 done -->
+      <g class="n-raw"><rect x="20" y="110" width="150" height="56" rx="8"/></g>
+      <text class="t" x="95" y="134" text-anchor="middle">TWSE 盤後</text><text class="s" x="95" y="152" text-anchor="middle">MI_INDEX · T86</text>
+      <g class="n-done"><rect x="215" y="110" width="150" height="56" rx="8"/></g>
+      <text class="t" x="290" y="134" text-anchor="middle">Adapter</text><text class="s" x="290" y="152" text-anchor="middle">節流 4s · 重試 3</text>
+      <g class="n-done"><rect x="410" y="110" width="150" height="56" rx="8"/></g>
+      <text class="t" x="485" y="134" text-anchor="middle">Normalizer</text><text class="s" x="485" y="152" text-anchor="middle">民國日期 · 千分位</text>
+      <g class="n-done"><rect x="605" y="110" width="150" height="56" rx="8"/></g>
+      <text class="t" x="680" y="134" text-anchor="middle">Validator</text><text class="s" x="680" y="152" text-anchor="middle">筆數 · 高低價 · 差距</text>
+      <g class="n-done"><rect x="800" y="110" width="180" height="56" rx="8"/></g>
+      <text class="t" x="890" y="134" text-anchor="middle">PostgreSQL 18</text><text class="s" x="890" y="152" text-anchor="middle">upsert · ingestion_runs</text>
+      <path class="ar" d="M170 138 H213" marker-end="url(#ah)"/>
+      <path class="ar" d="M365 138 H408" marker-end="url(#ah)"/>
+      <path class="ar" d="M560 138 H603" marker-end="url(#ah)"/>
+      <path class="ar" d="M755 138 H798" marker-end="url(#ah)"/>
+
+      <!-- row 2 planned (right to left) -->
+      <path class="ar" d="M890 166 V248" marker-end="url(#ah)"/>
+      <g class="n-done"><rect x="800" y="250" width="180" height="56" rx="8"/></g>
+      <text class="t" x="890" y="274" text-anchor="middle">Feature builder</text><text class="s" x="890" y="292" text-anchor="middle">Step 4 · 還原價特徵</text>
+      <g class="n-done"><rect x="605" y="250" width="150" height="56" rx="8"/></g>
+      <text class="t" x="680" y="274" text-anchor="middle">Signal engine</text><text class="s" x="680" y="292" text-anchor="middle">Step 4 · 訊號 v2</text>
+      <g class="n-done"><rect x="410" y="250" width="150" height="56" rx="8"/></g>
+      <text class="t" x="485" y="274" text-anchor="middle">API</text><text class="s" x="485" y="292" text-anchor="middle">Step 5 · FastAPI</text>
+      <g class="n-done"><rect x="215" y="250" width="150" height="56" rx="8"/></g>
+      <text class="t" x="290" y="274" text-anchor="middle">股票頁 · 首頁</text><text class="s" x="290" y="292" text-anchor="middle">Step 6–7 · SVG 圖表</text>
+      <g class="n-done"><rect x="20" y="250" width="150" height="56" rx="8"/></g>
+      <text class="t" x="95" y="274" text-anchor="middle">AI 解讀</text><text class="s" x="95" y="292" text-anchor="middle">Step 8 · 只看 facts</text>
+      <path class="ar" d="M800 278 H757" marker-end="url(#ah)"/>
+      <path class="ar" d="M605 278 H562" marker-end="url(#ah)"/>
+      <path class="ar" d="M410 278 H367" marker-end="url(#ah)"/>
+      <path class="ar" d="M215 278 H172" marker-end="url(#ah)"/>
+    </svg>
+  </div>
+  <div class="legend"><span><i style="background:var(--done-soft);border:1.5px solid var(--done)"></i>已完成，用真實資料驗證</span><span><i style="background:var(--sunken);border:1px solid var(--line)"></i>外部來源 / 檔案</span></div>
+</section>
+
+<!-- 3 -->
+<section id="decisions">
+  <div class="eyebrow">作品重點</div>
+  <h2>十二個設計決策</h2>
+  <p class="lead">這一段是作品集裡最能說明工程能力的部分。每一項都對應到程式裡實際的位置。</p>
+  <div class="decisions">
+    <article>
+      <h3>重跑同一天，結果完全一樣</h3>
+      <div class="where">repository.py · write_market_day</div>
+      <p>所有寫入都是 upsert。重跑時，這次被驗證剔除的列也會從資料庫刪掉，資料庫永遠跟最後一次成功的來源一致。</p>
+    </article>
+    <article>
+      <h3>原始回應先存檔，再解析</h3>
+      <div class="where">raw_store.py · reprocess</div>
+      <p>每次回應存成 <code>data/raw/{來源}/{資料集}/{日期}.json.gz</code>。解析規則改了，用 <code>reprocess</code> 從檔案重算一年資料，不必再打證交所。</p>
+    </article>
+    <article>
+      <h3>兩層驗證：整批擋下或逐列剔除</h3>
+      <div class="where">validators.py</div>
+      <p>行情少於 800 筆，或和前一交易日差超過 20%，整批不寫入。高低價矛盾的個別列剔除並記警告；剔除超過 1% 也整批失敗。</p>
+    </article>
+    <article>
+      <h3>分清楚「還沒公布」和「休市」</h3>
+      <div class="where">ingest.py · final 參數</div>
+      <p>18:30 起每 20 分鐘重試到 21:30。中間查無資料記為 pending，最後一次仍查無才判定休市。交易日曆由抓取結果自動建立，所以 2026-07-10 巴威颱風臨時休市這種不在任何假日表裡的日子，也會正確記錄。</p>
+    </article>
+    <article>
+      <h3>回補一年，可隨時中斷</h3>
+      <div class="where">backfill.py · ingestion_runs</div>
+      <p>約 500 次請求、間隔 4 秒加隨機抖動。已成功的日期自動跳過，中斷後重跑同一行指令就會接著做。worker 啟動時也會補抓漏掉的日子。</p>
+    </article>
+    <article>
+      <h3>換資料來源只動一層</h3>
+      <div class="where">adapters/base.py · Protocol</div>
+      <p>只有 adapter 知道資料從哪來。之後加上櫃（TPEX）或 FinMind 備援，只要實作同一個介面加一支 normalizer，驗證與入庫都不用改。</p>
+    </article>
+    <article>
+      <h3>還原價：除權息表＋從官方漲跌反推</h3>
+      <div class="where">features.py</div>
+      <p>除權息用 TWT49U 的參考價 ÷ 前收盤；TWT49U 不含的減資、分割，從「收盤 − 官方漲跌 ≠ 前一日收盤」反推。一年 32 萬筆個股日資料（243 個交易日 × 約 1,350 檔）的還原報酬與官方漲跌幅全部一致，颱風休市順延的除權息也落在正確的日子。</p>
+    </article>
+    <article>
+      <h3>訊號有冷卻期，AI 只能引用證據</h3>
+      <div class="where">signals.py · summary.py</div>
+      <p>同一檔的同類訊號在冷卻期內不重複，每天從 136 則降到 46 則。每筆訊號都存判斷依據；AI 摘要只看得到這些數字，寫入前逐一檢查數字出處與買賣建議用語，不符就不存。</p>
+    </article>
+    <article>
+      <h3>多頁式，桌面與手機同一份功能</h3>
+      <div class="where">base.html · navitems · export.html</div>
+      <p>今日市場、今日雷達、搜尋、個股、說明各是一頁。網站是一般的多頁網址；要傳的 HTML 檔也是多頁：同一個檔案裡用 #v-radar、#s-2330 切換，一次只顯示一頁。換頁與新手／標準切換只用 HTML 與 CSS（:target、:has），因為 iPhone／iPad 從 LINE、「檔案」預覽時不執行 JavaScript；能執行時才另外加上搜尋與還原捲動位置。導覽項目只寫一次，桌面在上方、手機在底部，測試檢查兩邊完全相同。</p>
+    </article>
+    <article>
+      <h3>過去的快照只看得到那一天</h3>
+      <div class="where">export.py · stock_context(as_of)</div>
+      <p>匯出過去的日子時，個股的行情、訊號、法人與除權息都只查到那天為止。這是檢查 07/29 檔案時發現的錯誤：個股段落原本顯示最新一天的資料。修正後加了測試，並確認沒修正時測試會失敗。回測也一樣：快照只用那天之前已經知道結果的訊號。</p>
+    </article>
+    <article>
+      <h3>回測和全部股票比，而且看中位數</h3>
+      <div class="where">outcomes.py · explain.backtest_verdict</div>
+      <p>這一年指數大漲，和指數比會讓每種訊號都「很準」；所以基準是同一天全部股票。個股報酬偏向少數大漲，平均會被拉高，判斷用上漲比例加中位數；另外算隔天才買與扣成本，說明文字全部由數字依規則產生。</p>
+    </article>
+    <article>
+      <h3>入口頁與內頁同一套視覺</h3>
+      <div class="where">style.css · .landing · lp-</div>
+      <p>入口頁照規格做全螢幕影片、點陣字與數字跳動；類別與變數都加前綴，不會和內頁互相影響。內頁改用同一組顏色與元件（白色膠囊導覽、深色膠囊、發光按鈕），台股紅漲綠跌保留。沒有 JavaScript 時換頁、選單、模式切換照樣能用。</p>
+    </article>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="model">
+  <div class="eyebrow">資料模型</div>
+  <h2>16 張表，一年資料 243 MB</h2>
+  <p class="lead">單位一律存「股」和「元」，顯示時才換成張和億元。網站用只有讀取權限的帳號連線。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>分組</th><th>資料表</th><th>內容</th><th>誰填</th></tr></thead>
+      <tbody>
+        <tr><td>行情</td><td class="mono">daily_prices<br>market_indices<br>market_breadth</td><td>開高低收、量、金額、不比價標記；指數含類股；漲跌家數與總成交</td><td><span class="pill ok">Step 2 · MI_INDEX</span></td></tr>
+        <tr><td>籌碼</td><td class="mono">institutional_flows</td><td>外資、投信、自營商買進、賣出、買賣超</td><td><span class="pill ok">Step 2 · T86</span></td></tr>
+        <tr><td>主檔</td><td class="mono">stocks<br>trading_calendar<br>data_sources</td><td>證券代號與名稱（只用較新日期覆蓋名稱）；交易日；資料來源與授權說明</td><td><span class="pill ok">Step 1–2</span></td></tr>
+        <tr><td>營運</td><td class="mono">ingestion_runs</td><td>每個資料集每天一列：狀態、筆數、警告、嘗試次數、原始檔路徑</td><td><span class="pill ok">Step 2</span></td></tr>
+        <tr><td>公司行動</td><td class="mono">corporate_actions<br>industries</td><td>除權息 1,587 筆（前收盤、參考價、權值＋息值）；官方 33 個產業別</td><td><span class="pill ok">Step 4 · TWT49U、OpenAPI</span></td></tr>
+        <tr><td>分析</td><td class="mono">daily_features<br>market_signals</td><td>量比、1/5/20 日還原報酬、20/60 日高低 32.8 萬列；訊號 v2 共 10,498 則與證據 JSON（v1 結果保留並存）</td><td><span class="pill ok">Step 4</span></td></tr>
+        <tr><td>回測</td><td class="mono">signal_outcomes<br>market_forward_returns</td><td>每筆訊號之後 5／20／60 日與隔天才買的報酬、結束日；同一天全部股票的平均、中位數與上漲比例</td><td><span class="pill ok">Step 11</span></td></tr>
+        <tr><td>AI</td><td class="mono">market_summaries<br>ai_queries</td><td>每日摘要與其依據的 facts；問答紀錄（問答功能未做）</td><td><span class="pill wait">Step 8 · 待金鑰</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="signals">
+  <div class="eyebrow">Step 4 · 訊號引擎 v2</div>
+  <h2>八種訊號，每天中位數 46 則</h2>
+  <p class="lead">門檻用一年資料回測調整，目標是每天 20–60 則。只看普通股，價格一律用還原價。回測期間 2025-12-22～2026-09-24。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>訊號</th><th>條件（v2）</th><th>冷卻期</th><th>每天中位數 / P90</th></tr></thead>
+      <tbody>
+        <tr><td><span class="chip vol">量能爆增</span></td><td>量比 ≥ 4，且成交金額 ≥ 1 億元</td><td>5 日</td><td class="mono">8 / 17</td></tr>
+        <tr><td><span class="chip hi">60 日新高</span> <span class="chip lo">新低</span></td><td>收盤突破前 60 日最高 / 跌破最低，成交金額 ≥ 1 億元</td><td>20 日</td><td class="mono">5 / 14 · 1 / 5</td></tr>
+        <tr><td><span class="chip hi">急漲</span> <span class="chip lo">急跌</span></td><td>5 日還原報酬 ≥ +20% / ≤ −20%</td><td>5 日</td><td class="mono">5 / 19 · 0 / 4</td></tr>
+        <tr><td><span class="chip fl">外資連買</span> <span class="chip fl">連賣</span></td><td>連續 ≥ 5 日同方向，累計佔成交量 ≥ 10%</td><td>整段只發一次</td><td class="mono">7 / 16 · 7 / 12</td></tr>
+        <tr><td><span class="chip fl">投信大買</span></td><td>當日投信買超佔成交量 ≥ 10%、買超金額 ≥ 5,000 萬，成交金額 ≥ 1 億元</td><td>5 日</td><td class="mono">3 / 10</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="lead">同樣的門檻、沒有冷卻期時每天中位數是 136 則，大多是同一件事天天重複。最多的一天是 2026-07-29（加權指數 −3.76%），急跌 73 則、新低 41 則，符合盤勢。每筆訊號都存 <code>evidence</code> 與 <code>engine_version</code>，改門檻時新舊版本可以並存比較。v2 加了投信買超金額下限（v1 會把高價股買超幾十張算成「大買」），並修正現金增資的還原基準；網站上的規則說明直接由這些門檻常數產生。</p>
+</section>
+
+<!-- backtest -->
+<section id="backtest">
+  <div class="eyebrow">Step 11 · 訊號回測（Phase 3）</div>
+  <h2>市面說法 vs 資料：沒有那麼簡單</h2>
+  <p class="lead">每一筆訊號出現之後 5、20、60 個交易日，股價實際怎麼走（已還原除權息），和同一天「全部上市股票」比較，而不是和加權指數比。
+    也算「盤後才看到、隔天才買到」的差別，以及扣掉手續費與證交稅（約 0.585%）之後的上漲比例。資料：2025-09-24～2026-08-31 出現、已滿 20 個交易日的 9,869 筆 v2 訊號。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>訊號</th><th class="mono">筆數</th><th>20 日後上漲比例</th><th>全部股票</th><th>中位數</th><th>全部股票</th><th>和全部股票比</th></tr></thead>
+      <tbody>
+        <tr><td>創 60 日新低</td><td class="mono">436</td><td class="mono">63%</td><td class="mono">56%</td><td class="mono up">+3.1%</td><td class="mono">+1.1%</td><td>好一些</td></tr>
+        <tr><td>投信大買</td><td class="mono">869</td><td class="mono">59%</td><td class="mono">50%</td><td class="mono up">+1.8%</td><td class="mono">−0.1%</td><td>好一些</td></tr>
+        <tr><td>外資連賣</td><td class="mono">1,652</td><td class="mono">55%</td><td class="mono">50%</td><td class="mono up">+1.1%</td><td class="mono">−0.2%</td><td>好一些</td></tr>
+        <tr><td>5 日急跌</td><td class="mono">388</td><td class="mono">64%</td><td class="mono">61%</td><td class="mono up">+6.6%</td><td class="mono">+2.2%</td><td>差不多</td></tr>
+        <tr><td>外資連買</td><td class="mono">1,799</td><td class="mono">52%</td><td class="mono">48%</td><td class="mono up">+0.4%</td><td class="mono">−0.5%</td><td>差不多</td></tr>
+        <tr><td>創 60 日新高</td><td class="mono">1,123</td><td class="mono">51%</td><td class="mono">48%</td><td class="mono up">+0.2%</td><td class="mono">−0.4%</td><td>差不多</td></tr>
+        <tr><td>5 日急漲</td><td class="mono">1,702</td><td class="mono">49%</td><td class="mono">49%</td><td class="mono dn">−0.7%</td><td class="mono">−0.4%</td><td>差不多</td></tr>
+        <tr><td>量能爆增</td><td class="mono">1,900</td><td class="mono">46%</td><td class="mono">49%</td><td class="mono dn">−1.1%</td><td class="mono">−0.3%</td><td>差不多</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="myths">
+    <article><b>「大盤一直漲，買什麼都會漲。」</b><p>同期加權指數 26,197 → 47,940（+83%），但任選一天買進全部上市股票，20 個交易日後平均只有 49% 上漲、中位數 −0.3%。指數被少數大型股帶動。</p></article>
+    <article><b>「外資連續買超，股價就會跟著漲。」</b><p>連買之後 20 日：52% 上漲、中位數 +0.4%；連賣之後反而是 55%、+1.1%。扣掉交易成本，連買的上漲比例從 52% 降到 49%。</p></article>
+    <article><b>「短線急漲的強勢股，會繼續漲。」</b><p>平均 +5.1% 是被少數飆股拉高的；中位數 −0.7%，中間一半的結果落在 −11.3% 到 +16.0%。</p></article>
+    <article><b>「爆量代表主力進場，接下來會漲。」</b><p>之後 20 日只有 46% 上漲，比同一天全部股票的 49% 還低；中位數 −1.1%。</p></article>
+  </div>
+  <p class="lead">網站分三種深度：新手看每種訊號一句話（例如「之後比全部股票好一些」），標準看一張表，進階看完整分布、隔天才買、扣成本，以及這些「市面說法 vs 資料」和回測的限制（只有約一年、同一種盤勢、訊號重疊、漲跌停買不到）。全部只描述過去，不代表之後。</p>
+</section>
+
+<!-- env -->
+<section id="env">
+  <div class="eyebrow">執行環境</div>
+  <h2>在一台 4 GB 的 ThinkPad X240 上跑完整系統</h2>
+  <p class="lead">開發與日常執行都在同一台 2014 年的筆電上。記憶體是唯一的瓶頸，所以每一層都選最省的做法。資料一天只變一次，這點讓省資源變得容易。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>層</th><th>做法</th><th>平常占用</th></tr></thead>
+      <tbody>
+        <tr><td>資料庫</td><td>原生 PostgreSQL 18，不用 Docker（BIOS 沒開虛擬化，WSL 2 也要多吃 1–2 GB）；限制連線數、關閉 JIT、只接受本機連線</td><td class="mono">≈ 60 MB（實測）</td></tr>
+        <tr><td>資料管線</td><td>Windows 工作排程器每天 18:30 叫起 <code>radar daily</code>，跑完就結束、不開視窗；錯過的日子開機後自動補抓</td><td class="mono">0（執行時最高 ≈ 75 MB，實測）</td></tr>
+        <tr><td>網站</td><td>原規劃 Next.js，改成 FastAPI 直接產生 HTML，圖表在伺服器端畫成 SVG：沒有前端建置，和管線共用同一個環境；平常只傳匯出的 HTML 檔，網站不必開著</td><td class="mono">≈ 85 MB（實測）</td></tr>
+        <tr><td>AI 解讀</td><td>目前是模擬摘要；填入金鑰後用 Claude API（claude-opus-5）每天一次，估計 0.03～0.08 美元</td><td class="mono">0</td></tr>
+        <tr><td>硬體</td><td>單條記憶體插槽，最高 8 GB。目前不升級，所有設計都以 4 GB 為準；日後換成 8 GB DDR3L-1600 不必改程式</td><td class="mono">4 GB</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="roadmap">
+  <div class="eyebrow">規劃</div>
+  <h2>十三步路線圖</h2>
+  <div class="progress">
+    <div class="row"><span id="prog-text" class="tab">—</span><span>勾選會存在這個瀏覽器</span></div>
+    <div class="bar"><span id="prog-bar" style="width:0%"></span></div>
+  </div>
+  <div class="steps" id="steps"></div>
+  <button class="reset" id="reset" type="button">恢復預設勾選</button>
+</section>
+
+<!-- 7 -->
+<section id="risks">
+  <div class="eyebrow">風險與待決</div>
+  <h2>還沒解決的事</h2>
+  <div class="risks">
+    <div><span class="sev l">已解決 · 格式</span><div><b>解析規則已用真實回應驗證</b><p>2026-09-25 用 2026-09-23、2025-09-24 與休市日 2026-06-19 實測：行情 1,380 筆、指數 137 個、法人 1,332 筆全部通過驗證，零警告；休市日正確判定為查無資料。</p></div></div>
+    <div><span class="sev l">已解決 · 除權息</span><div><b>還原價已上線</b><p>除權息、減資、分割都已還原；一年 32 萬筆個股日資料（243 個交易日 × 約 1,350 檔）的還原日報酬與官方漲跌幅全部一致。實測另外發現：颱風休市時除權息會順延到下一個交易日，但官方資料仍寫原日期，已處理。</p></div></div>
+    <div><span class="sev m">中 · 授權</span><div><b>公開上線前要確認證交所資訊使用規範</b><p>自己用沒問題；放上公開網站或作品集展示真實資料前，要先讀過規範，必要時只展示截圖或延遲資料。</p></div></div>
+    <div><span class="sev m">中 · 上櫃歷史</span><div><b>上櫃只能從 2026-10-02 開始累積</b><p>櫃買中心 OpenAPI 只提供最新一天，網站的歷史查詢目前對程式沒有回應（不會去繞過人機驗證）。上櫃的訊號與回測要等資料累積；之後若歷史查詢能用，再一次補齊。</p></div></div>
+    <div><span class="sev h">高 · 即時行情</span><div><b>上架讓別人看即時行情，需要先取得授權</b><p>盤中即時目前用證交所基本市況報導網站，只適合自己看。對外提供要先和證交所（上櫃另有櫃買中心）簽資訊使用契約，或改用已授權、可對外顯示的資訊廠商。程式已把資料來源做成可替換：拿到授權後新增一個資料來源類別、改一個設定即可。</p></div></div>
+    <div><span class="sev m">中 · 封鎖</span><div><b>請求太頻繁會被暫時封鎖 IP</b><p>間隔已設 4 秒加抖動。回補期間不要同時手動 ingest，也不要調低 <code>REQUEST_INTERVAL_SEC</code>。</p></div></div>
+    <div><span class="sev m">中 · 手機安裝</span><div><b>手機要安裝成 App 需要 HTTPS</b><p>瀏覽器只允許 HTTPS 或 localhost 的網站安裝與離線快取。這台電腦上可以直接安裝；手機要經過 HTTPS 連線或公開主機才行。目前給一個人看用 HTML 檔就夠，檔案本身也有手機分頁列。</p></div></div>
+    <div><span class="sev l">低 · AI</span><div><b>目前是模擬摘要</b><p>沒有 Claude API 金鑰時，摘要依固定規則從當天數字組成，網站與匯出檔都標示「模擬」。在 <code>.env</code> 填入 <code>ANTHROPIC_API_KEY</code> 後自動改用 Claude。</p></div></div>
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="next">
+  <div class="eyebrow">本週要做</div>
+  <h2>每天的成果：一個檔案</h2>
+  <p class="lead">排程每天 18:30 跑完後，會把當天存成一個 HTML 檔，不需要網路或伺服器，雙擊就能開，可以直接用 LINE 或 Email 傳給要看的人。</p>
+  <div class="cmds">
+    <div class="cmd"><span class="k">1</span><div><pre>data\exports\台股雷達_最新.html</pre><p>每天自動更新，固定是最新交易日，直接傳這個檔就好；另外保留每一天的 <code>台股雷達_YYYY-MM-DD.html</code>。電腦、手機都能開：打開是入口頁，「看今天的盤後」進到今日市場；同一組導覽（今日市場、今日雷達、訊號回測、搜尋、說明），可以離線搜尋當天所有上市股票。</p></div></div>
+    <div class="cmd"><span class="k">2</span><div><pre>.\.venv\Scripts\python -m radar export --date 2026-07-29</pre><p>想傳某一天（例如大跌那天）就指定日期匯出，不會動到「最新」。那天有 133 檔有訊號，最多收錄 80 檔的個股段落（約 5 MB），個股段落都停在那一天。</p></div></div>
+    <div class="cmd"><span class="k">3</span><div><pre>data\logs\daily.log</pre><p>每天的執行紀錄；有問題時看這裡。</p></div></div>
+  </div>
+</section>
+
+<footer>資料來源：臺灣證券交易所、證券櫃檯買賣中心盤後公開資料；盤中即時為證交所基本市況報導網站（僅供個人使用）。本專案不繞過驗證碼、不提供任何買賣建議。「成品示意」一節的行情數字與股名為示意。</footer>
+</div>
+
+<script>
+(function(){
+  var KEY='radar-roadmap-v9';
+  var STEPS=[
+    {n:1,t:'基礎建設',s:'Docker Compose、PostgreSQL、migration、seed',st:'ok',dod:'一行指令起得來，資料表與參考資料都在。',tasks:[
+      ['Docker Compose：db、migrate、worker 三個服務',1],['13 張表的 schema 與索引',1],['資料來源 seed（TWSE、TPEX、FinMind）',1],['radar_test 測試資料庫',1]]},
+    {n:2,t:'TWSE 抓取與正規化',s:'行情、指數、漲跌家數、三大法人',st:'ok',dod:'用真實的一天資料入庫成功，數字與證交所網站一致。',tasks:[
+      ['Adapter：節流、重試、存原始檔',1],['Normalizer：民國日期、千分位、HTML 漲跌符號',1],['Validator：整批與逐列檢查',1],['單元測試與入庫整合測試',1],
+      ['probe 真實回應，比對表格標題與欄位（2026-09-25 已驗證：今天、一年前、休市日都正確）',1],['本機可直接執行：migrate、daily、讀取 .env',1],['安裝 PostgreSQL 18 並執行 db/native/setup.sql',1],['radar migrate 建立資料表',1],['22 項測試全數通過，含 9 項資料庫整合測試',1]]},
+    {n:3,t:'回補一年歷史',s:'可中斷續跑、每日排程',st:'ok',dod:'一年約 245 個交易日全部是 success 或 no_data，沒有 failed。',tasks:[
+      ['backfill 跳過已完成日期',1],['每日排程與啟動時補抓',1],['下載一年原始檔：243 個交易日、19 個休市日，零失敗',1],['backfill --from-raw 寫入資料庫：4 分鐘，行情 32.8 萬列、法人 31.6 萬列',1],['status 檢查沒有 failed',1],['抽查台積電收盤價與外資買賣超，與原始回應一致',1]]},
+    {n:4,t:'除權息、產業別、特徵與訊號',s:'雷達的核心',st:'ok',dod:'每天自動產生訊號，一年回測下每日數量落在合理範圍，每筆都有證據。',tasks:[
+      ['除權息 TWT49U：1,587 筆，前收盤與行情表逐筆一致',1],['公司基本資料與產業別：官方 33 類，普通股 1,089／1,093 有產業別',1],['休市日曆：休市日不必重試到 21:30',1],
+      ['還原價：除權息＋從官方漲跌反推減資、分割；颱風順延',1],['feature builder：32.8 萬列，51 秒算完一年',1],['訊號引擎 v2：八種訊號、冷卻期、evidence；投信金額下限、現金增資還原修正',1],['一年回測：每天中位數 46 則',1],['一致性稽核：除權息紀錄 vs 官方漲跌停價，0 筆矛盾',1],['接進每日排程',1]]},
+    {n:5,t:'API',s:'FastAPI，唯讀帳號',st:'ok',dod:'網站只用唯讀帳號連資料庫，API 有文件與測試。',tasks:[
+      ['唯讀登入帳號 radar_web（寫入會被資料庫拒絕）',1],['市場當日資料、訊號、個股、搜尋四支 API',1],['/api/docs 自動產生文件',1]]},
+    {n:6,t:'股票頁',s:'個股的完整脈絡',st:'ok',dod:'輸入代號就看得到一年走勢、法人動向和歷史訊號。',tasks:[
+      ['K 線與成交量（伺服器端 SVG）',1],['三大法人買賣超',1],['訊號與除權息標在圖上',1],['同產業成交金額前幾名',1]]},
+    {n:7,t:'首頁',s:'今天的盤後一頁看完',st:'ok',dod:'打開首頁 30 秒內知道今天大盤與值得注意的個股。',tasks:[
+      ['今日市場：狀況標籤＋一句白話說明',1],['今日雷達：先看分類與數量，點開才看股票',1],['新手／標準模式；名詞說明（是什麼／代表什麼／不代表什麼）',1],['個股「為什麼被雷達注意」與簡單理解',1],['資料與計算方式頁（由門檻常數產生）',1],['市場熱點、類股漲跌（標準模式）',1],['手機寬度、深淺色主題實測',1]]},
+    {n:8,t:'盤後摘要',s:'AI 或模擬',st:'ok',dod:'摘要只引用資料庫裡的事實，沒有買賣建議。',tasks:[
+      ['每日摘要：只給模型 facts，寫入 market_summaries',1],['寫入前檢查數字出處與禁用詞，不符改寫一次、仍不符不存',1],
+      ['模擬摘要：沒有金鑰時依規則組句，一樣通過檢查，標示「模擬」；243 個交易日已補齊',1],['填入 API 金鑰，改用 Claude 產生',0],['問答功能（ai_queries）',0]]},
+    {n:9,t:'發布',s:'先給一個人看',st:'next',dod:'每天自動更新，成果是一個可以直接傳的檔案。',tasks:[
+      ['Windows 工作排程器：平日 18:30 與每次登入（延後 2 分鐘），用 pythonw 不開視窗，已實跑成功',1],['單一 HTML 檔：當日總覽＋有訊號的個股，離線可看，約 2 MB',1],['HTML 檔內建離線搜尋：當天全部上市證券（約 1,380 檔）的收盤與訊號',1],['匯出過去日期時，個股段落只用那天以前的資料',1],
+      ['公開上線前確認證交所資訊使用規範',0],['選主機與託管資料庫',0],['備份資料庫與 data/raw',0],['抓取失敗通知',0]]},
+    {n:10,t:'多頁式、響應式與 App 模式',s:'五種頁面，桌面、平板、手機同一份功能',st:'ok',dod:'每種內容各一頁、三種寬度功能一致；手機可以安裝到主畫面，看過的頁面離線也打得開。',tasks:[
+      ['多頁式：今日市場、今日雷達、搜尋、個股、說明各一頁；看過去的日子切換頁面時留在同一天',1],['HTML 檔也是多頁：#v-radar、#s-代號；換頁與模式切換不需要 JavaScript（iPhone／iPad 預覽可用）',1],
+      ['響應式：桌面上方導覽、手機底部分頁列，同一組項目，測試確保一致',1],['1280／768／375 三種寬度實測：沒有橫向捲動，跳轉不被頁首擋住',1],
+      ['manifest 與圖示（含 maskable）',1],['service worker：頁面先連網路、失敗用快取，改版自動清舊快取',1],['搜尋頁與最近看過（桌面、手機都有）',1],['手機透過 HTTPS 連線安裝',0],
+      ['入口頁：全螢幕影片背景、點陣字標題、數字跳動的當日統計',1],['內頁改成和入口頁同一套黑底風格',1]]},
+    {n:11,t:'訊號回測（Phase 3）',s:'市面說法 vs 資料',st:'ok',dod:'每種訊號之後的表現都和同一天全部股票比較，文字只描述過去。',tasks:[
+      ['每筆訊號之後 5／20／60 日的還原報酬，與隔天才買的 20 日報酬',1],['同一天全部股票的比較基準；扣掉手續費與證交稅',1],
+      ['新手／標準／進階三種深度；進階有市面說法對照與限制說明',1],['快照只用當時已知的結果（as_of）',1],['更長的歷史、分多頭／空頭比較',0]]},
+    {n:12,t:'盤中即時',s:'開盤時看到當下的市場',st:'next',dod:'開盤時間打開網站就看到即時指數與雷達名單的盤中表現；上架前換成有授權的資料來源。',tasks:[
+      ['/api/live：加權指數、櫃買指數、盤中成交金額、指定股票的即時報價',1],['伺服器端快取 15 秒，使用者再多上游請求數也不變；上游失敗顯示上一次的資料',1],
+      ['今日市場、個股頁、入口頁的即時區塊；盤後資料進來後自動收起',1],['資料來源可替換（LiveProvider），非本機啟動時提醒授權',1],
+      ['取得證交所／櫃買中心的即時行情授權，或簽有授權的資訊廠商',0],['人多時改成伺服器推送（SSE）',0]]},
+    {n:13,t:'上櫃股票',s:'櫃買中心 OpenAPI',st:'next',dod:'上櫃股票和上市一樣有行情、法人、產業、訊號與回測。',tasks:[
+      ['櫃買中心 adapter／normalizer，輸出和上市同一套資料模型',1],['每天收集最新一天：行情 1,006 筆、三大法人 910 筆、892 家公司產業別',1],
+      ['搜尋、個股頁、今日市場（櫃買指數、上櫃漲跌家數）、盤中即時都包含上櫃',1],['不決定交易日曆；筆數檢查分市場',1],
+      ['上櫃訊號：累積 20～60 個交易日後陸續出現',0],['櫃買中心歷史查詢能用時，一次補齊一年',0]]}
+  ];
+  var LABEL={ok:['完成','ok'],wait:['待實跑','wait'],next:['下一步','wait'],no:['未開始','no']};
+  var saved={};
+  try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(e){saved={};}
+  function isOn(id,def){return Object.prototype.hasOwnProperty.call(saved,id)?!!saved[id]:!!def;}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(saved));}catch(e){}}
+  var root=document.getElementById('steps');
+  function render(){
+    root.innerHTML='';
+    var all=0,done=0;
+    STEPS.forEach(function(s){
+      var d=document.createElement('details');
+      d.className='step'+(s.st==='next'?' is-next':'');
+      if(s.st==='next'||s.st==='wait')d.open=true;
+      var cnt=0;
+      s.tasks.forEach(function(t,i){if(isOn(s.n+'-'+i,t[1]))cnt++;});
+      all+=s.tasks.length;done+=cnt;
+      var lab=LABEL[s.st];
+      d.innerHTML='<summary><span class="num">'+s.n+'</span><span class="ttl"><span>'+s.t+'</span><small>'+s.s+'</small></span><span class="right"><span class="cnt">'+cnt+'/'+s.tasks.length+'</span><span class="pill '+lab[1]+'">'+lab[0]+'</span></span></summary>';
+      var body=document.createElement('div');body.className='body';
+      body.innerHTML='<p class="dod">完成條件：'+s.dod+'</p>';
+      var ul=document.createElement('ul');ul.className='tasks';
+      s.tasks.forEach(function(t,i){
+        var id=s.n+'-'+i;
+        var li=document.createElement('li');
+        li.innerHTML='<label><input type="checkbox" id="t'+id+'"'+(isOn(id,t[1])?' checked':'')+'><span>'+t[0]+'</span></label>';
+        li.querySelector('input').addEventListener('change',function(e){saved[id]=e.target.checked;save();update();});
+        ul.appendChild(li);
+      });
+      body.appendChild(ul);d.appendChild(body);root.appendChild(d);
+    });
+    setProg(done,all);
+  }
+  function setProg(done,all){
+    var pct=all?Math.round(done/all*100):0;
+    document.getElementById('prog-text').textContent='已完成 '+done+' / '+all+' 項（'+pct+'%）';
+    document.getElementById('prog-bar').style.width=pct+'%';
+  }
+  function update(){
+    var all=0,done=0;
+    root.querySelectorAll('details.step').forEach(function(d,k){
+      var boxes=d.querySelectorAll('input[type=checkbox]');var c=0;
+      boxes.forEach(function(b){if(b.checked)c++;});
+      d.querySelector('.cnt').textContent=c+'/'+boxes.length;
+      all+=boxes.length;done+=c;
+    });
+    setProg(done,all);
+  }
+  document.getElementById('reset').addEventListener('click',function(){saved={};save();render();});
+  render();
+})();
+</script>

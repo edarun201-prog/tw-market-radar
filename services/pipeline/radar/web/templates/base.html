@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-Hant" data-mode="beginner">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}台股市場雷達{% endblock %}</title>
+<meta name="theme-color" content="#000000">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-title" content="台股雷達">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<script>
+  // 顯示模式先套用再畫面，避免閃一下；存不到（隱私模式等）就用預設的新手模式
+  document.documentElement.classList.add('js');   // 有 JavaScript：匯出檔一次只顯示一頁（見 export.html）
+  try { var m = localStorage.getItem('radar-mode'); if (m === 'standard' || m === 'beginner' || m === 'advanced') document.documentElement.dataset.mode = m; } catch (e) {}
+</script>
+{% if export %}<link rel="icon" href="{{ icon_uri }}">
+<style>
+{{ inline_css|safe }}
+</style>
+{% else %}<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">{% endif %}
+{% include "_landing_head.html" %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% import "_macros.html" as m with context %}
+{% set tab = tab|default('') %}
+{# 主要頁面只定義一次：桌面版放在上方導覽列（文字），手機版放在底部分頁列（圖示＋短名稱），兩邊的項目與功能完全一樣。
+   網站是一般的多頁網址；匯出檔是同一個檔案裡的多個頁面（#/radar 等），由 export.html 的程式切換。 #}
+{% set navitems %}
+  <a href="{{ m.page_href('home') }}" data-page="home"{% if tab == 'home' or export %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4v16h18"/><path d="M6.5 14.5l4-4 3 3 6-6.5"/></svg><span class="l">今日市場</span><span class="s">市場</span></a>
+  <a href="{{ m.page_href('radar') }}" data-page="radar"{% if tab == 'radar' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12V3"/><circle cx="16" cy="7.5" r="1.2" class="fill"/></svg><span class="l">今日雷達</span><span class="s">雷達</span></a>
+  <a href="{{ m.page_href('backtest') }}" data-page="backtest"{% if tab == 'backtest' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4.5V9h4.5"/><path d="M12 7.5V12l3 2"/></svg><span class="l">訊號回測</span><span class="s">回測</span></a>
+  <a href="{{ m.page_href('search') }}" data-page="search"{% if tab == 'search' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5"/></svg><span class="l">搜尋股票</span><span class="s">搜尋</span></a>
+  <a href="{{ m.page_href('about') }}" data-page="about"{% if tab == 'about' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.01"/></svg><span class="l">資料與計算方式</span><span class="s">說明</span></a>
+{% endset %}
+<header class="top">
+  <div class="in">
+    <a class="brand" href="{{ m.page_href('landing') }}" aria-label="台股市場雷達首頁">
+      <img src="{{ icon_uri if export else '/static/icon.svg' }}" alt="" width="52" height="52">
+    </a>
+    <nav class="links" aria-label="主要頁面">{{ navitems }}</nav>
+    {# 單選按鈕：不能執行程式的檢視器也能切換（CSS 直接看勾選狀態）；能執行程式時另外記住上次的選擇 #}
+    <div class="mode" role="radiogroup" aria-label="顯示模式">
+      <span class="mode-label">顯示</span>
+      <input type="radio" name="radar-mode" id="mode-beginner" value="beginner" data-set-mode="beginner" checked><label for="mode-beginner">新手</label>
+      <input type="radio" name="radar-mode" id="mode-standard" value="standard" data-set-mode="standard"><label for="mode-standard">標準</label>
+      <input type="radio" name="radar-mode" id="mode-advanced" value="advanced" data-set-mode="advanced"><label for="mode-advanced">進階</label>
+    </div>
+  </div>
+</header>
+<div class="net" id="net" role="status" hidden>離線中：顯示的是這台裝置上次存下的頁面，連上網路後會自動更新。</div>
+<main class="wrap">
+{% include "_onboard.html" %}
+{% block content %}{% endblock %}
+</main>
+<footer class="wrap foot">
+  <p>台股市場雷達幫你快速發現台股市場的異常，並理解異常的原因。只描述市場資料，不預測股價，也不提供任何買賣建議；
+    本網站只把公開市場資訊整理成統計與說明，不是證券投資顧問事業。</p>
+  <p>資料來源：臺灣證券交易所盤後公開資料，平日 18:30 後更新・訊號引擎 {{ ENGINE_VERSION }}・<a href="{{ m.page_href('about') }}">資料與計算方式</a>・<button type="button" class="linklike" data-onboard-show>使用說明</button>{% if not export %}<span class="std-only">・<a href="/api/docs">API</a></span><span data-install hidden>・<button type="button" class="linklike">安裝成 App</button></span>{% endif %}</p>
+</footer>
+
+{# 手機版底部分頁列（App 形式）：和上方導覽列同一組項目 #}
+<nav class="tabbar" aria-label="主要頁面">{{ navitems }}</nav>
+
+{% include "_help_defs.html" %}
+<script>
+(function () {
+  var root = document.documentElement;
+  function apply(mode) {
+    root.dataset.mode = mode;
+    document.querySelectorAll('[data-set-mode]').forEach(function (b) { b.checked = b.dataset.setMode === mode; });
+    // 標準、進階模式直接展開詳細 K 線；新手模式收起來，需要時再點開
+    document.querySelectorAll('details[data-std-open]').forEach(function (d) { d.open = mode !== 'beginner'; });
+  }
+  apply(root.dataset.mode || 'beginner');
+  document.querySelectorAll('[data-set-mode]').forEach(function (b) {
+    b.addEventListener('change', function () {
+      apply(b.dataset.setMode);
+      try { localStorage.setItem('radar-mode', b.dataset.setMode); } catch (e) {}
+    });
+  });
+  var ob = document.getElementById('onboard');
+  function seen() { try { return localStorage.getItem('radar-onboarded') === '1'; } catch (e) { return false; } }
+  if (ob && !seen()) ob.hidden = false;
+  document.querySelectorAll('[data-onboard-close]').forEach(function (b) {
+    b.addEventListener('click', function () { ob.hidden = true; try { localStorage.setItem('radar-onboarded', '1'); } catch (e) {} });
+  });
+  document.querySelectorAll('[data-onboard-show]').forEach(function (b) {
+    b.addEventListener('click', function () { ob.hidden = false; ob.scrollIntoView({ block: 'start' }); });
+  });
+
+  // 頁內跳轉時避開頁首：頁首在中等寬度會折成兩行，所以用實際高度
+  var header = document.querySelector('header.top');
+  function pad() { root.style.scrollPaddingTop = (header.offsetHeight + 12) + 'px'; }
+  pad(); window.addEventListener('resize', pad);
+
+  // 網址帶著訊號類型（例：/radar#vol_spike）時，直接展開那一類
+  function openTarget() {
+    var el = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (el && el.tagName === 'DETAILS') { el.open = true; el.scrollIntoView({ block: 'start' }); }
+  }
+  window.addEventListener('hashchange', openTarget); openTarget();
+
+  // 離線提示：網路斷線，或這一頁是 service worker 從快取拿出來的
+  var net = document.getElementById('net');
+  function netState() { net.hidden = navigator.onLine && !root.dataset.cached; }
+  window.addEventListener('online', netState); window.addEventListener('offline', netState); netState();
+{% if not export %}
+  // 最近看過的股票（只存在這台裝置，搜尋頁會列出來）
+  var st = document.querySelector('[data-recent-symbol]');
+  if (st) try {
+    var list = JSON.parse(localStorage.getItem('radar-recent') || '[]').filter(function (x) { return x.symbol !== st.dataset.recentSymbol; });
+    list.unshift({ symbol: st.dataset.recentSymbol, name: st.dataset.recentName });
+    localStorage.setItem('radar-recent', JSON.stringify(list.slice(0, 8)));
+  } catch (e) {}
+
+  // 盤中即時（/api/live）：頁面上所有 [data-live-panel] 共用一個請求。開盤時間每 15 秒、其他時間每 5 分鐘更新，
+  // 分頁看不到時暫停。只有在即時資料比這一頁的盤後資料新時（data-day 之後的日子）才顯示。
+  var lives = [].slice.call(document.querySelectorAll('[data-live-panel]'));
+  if (lives.length && window.fetch) {
+    var syms = [];
+    lives.forEach(function (p) { (p.dataset.liveSymbols || '').split(',').forEach(function (s) { if (s && syms.indexOf(s) < 0) syms.push(s); }); });
+    var timer = null, every = 300;
+    function trimNum(v, d) { return v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: d }); }
+    function fmt(field, v, isIndex) {
+      if (v === null || v === undefined) return '–';
+      if (field === 'price') return isIndex ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : trimNum(v, 2);
+      if (field === 'change') return (v > 0 ? '+' : '') + (isIndex ? v.toFixed(2) : trimNum(v, 2));
+      if (field === 'change_pct') return (v > 0 ? '+' : '') + (v * 100).toFixed(2) + '%';
+      if (field === 'turnover') return trimNum(Math.round(v / 1e7) / 10, 1) + ' 億';
+      return String(v);
+    }
+    function tone(v) { return v > 0 ? 'up' : v < 0 ? 'down' : 'flat'; }
+    function hhmm(iso) { return iso ? iso.slice(11, 19) : ''; }
+    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+    function render(d) {
+      every = d && d.refresh_seconds || 300;
+      lives.forEach(function (p) {
+        var own = (p.dataset.liveSymbols || '').split(',').filter(Boolean);
+        var single = own.length === 1 && !p.querySelector('[data-live-table]');
+        var stock = single && d && d.stocks ? d.stocks.filter(function (q) { return q.symbol === own[0]; })[0] : null;
+        var ref = single ? stock : d && d.index;
+        // 比這一頁的盤後資料新，才有顯示的意義
+        p.hidden = !(d && ref && ref.date && ref.date > p.dataset.day);
+        if (p.hidden) return;
+        p.dataset.phase = d.phase;
+        var status = p.querySelector('[data-live-status]');
+        if (status) status.textContent = d.phase_label + (ref.time ? ' ' + hhmm(ref.time) : '') + (d.stale ? '（可能不是最新）' : '');
+        var src = { index: d.index, otc: d.otc, market: d.market, stock: stock };
+        p.querySelectorAll('[data-live-f]').forEach(function (f) {
+          var parts = f.dataset.liveF.split('.'), obj = src[parts[0]];
+          f.textContent = fmt(parts[1], obj ? obj[parts[1]] : null, parts[0] !== 'stock');
+        });
+        p.querySelectorAll('[data-live-tone]').forEach(function (f) {
+          var obj = src[f.dataset.liveTone];
+          f.classList.remove('up', 'down', 'flat');
+          if (obj && obj.change !== null) f.classList.add(tone(obj.change));
+        });
+        var body = p.querySelector('[data-live-table]');
+        if (body && d.stocks) {
+          body.textContent = '';
+          d.stocks.slice().sort(function (a, b) { return (b.change_pct || -9) - (a.change_pct || -9); }).forEach(function (q) {
+            var tr = el('tr'), td = el('td', 'sym'), a = el('a');
+            a.href = '/stock/' + encodeURIComponent(q.symbol);
+            a.appendChild(el('b', '', q.symbol)); a.appendChild(document.createTextNode(' ' + (q.name || '')));
+            td.appendChild(a); tr.appendChild(td);
+            tr.appendChild(el('td', 'num', fmt('price', q.price, false)));
+            var chg = el('td', 'num ' + tone(q.change), fmt('change_pct', q.change_pct, false));
+            if (q.at_limit) chg.appendChild(el('span', 'limit ' + q.at_limit, q.at_limit === 'up' ? '漲停' : '跌停'));
+            tr.appendChild(chg);
+            tr.appendChild(el('td', 'num std-only', q.volume_lots === null ? '–' : q.volume_lots.toLocaleString('en-US') + ' 張'));
+            body.appendChild(tr);
+          });
+        }
+      });
+    }
+    function schedule() { clearTimeout(timer); if (document.visibilityState === 'visible') timer = setTimeout(load, every * 1000); }
+    function load() {
+      fetch('/api/live' + (syms.length ? '?symbols=' + syms.slice(0, 40).join(',') : ''), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+        .then(function (d) { render(d); schedule(); });
+    }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') load(); else clearTimeout(timer); });
+    load();
+  }
+
+  // App 模式：註冊離線快取；瀏覽器允許安裝時，頁尾出現「安裝成 App」
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
+  var install = document.querySelector('[data-install]'), deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; install.hidden = false; });
+  install.querySelector('button').addEventListener('click', function () {
+    if (!deferred) return;
+    deferred.prompt(); deferred.userChoice.then(function () { deferred = null; install.hidden = true; });
+  });
+  window.addEventListener('appinstalled', function () { install.hidden = true; });
+{% endif %}
+})();
+</script>
+</body>
+</html>

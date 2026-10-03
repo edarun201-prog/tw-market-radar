@@ -1,0 +1,38 @@
+{# 股票連結：網站連到 /stock/代號；匯出檔連到檔案裡的個股頁（#s-代號），沒有收錄的只顯示文字 #}
+{% macro stock_link(symbol, name) -%}
+{%- set href = stock_href(symbol) -%}
+{%- if href %}<a href="{{ href }}"><b>{{ symbol }}</b> {{ name }}</a>{% else %}<span><b>{{ symbol }}</b> {{ name }}</span>{% endif -%}
+{%- endmacro %}
+
+{# 頁面網址：網站是一般的多頁網址（入口頁 /、今日市場 /market；看過去的日子時帶著 ?date=）；
+   匯出檔是同一個檔案裡的頁面（#v-landing、#v-market 等，用 CSS :target 切換，不需要程式） #}
+{% macro page_href(page, anchor='') -%}
+{%- if export -%}
+  #{{ anchor if anchor else 'v-' ~ ('market' if page == 'home' else page) }}
+{%- elif page == 'landing' -%}
+  /
+{%- elif page == 'home' -%}
+  /market{{ date_qs|default('') }}
+{%- elif page == 'radar' -%}
+  /radar{{ date_qs|default('') }}{{ '#' ~ anchor if anchor }}
+{%- else -%}
+  /{{ page }}
+{%- endif -%}
+{%- endmacro %}
+
+{# 前後交易日：path 是要切換的頁面（今日市場 / 今日雷達），匯出檔只有一天，不顯示 #}
+{% macro daynav(path) -%}
+<div class="daynav">
+  {% if prev_day and not export %}<a href="{{ path }}?date={{ prev_day }}" aria-label="前一個交易日">‹ {{ prev_day.strftime('%m/%d') }}</a>{% endif %}
+  <span class="muted">{{ day|day }} 盤後</span>
+  {% if export %}<span class="muted small">・離線快照</span>
+  {% elif next_day %}<a href="{{ path }}?date={{ next_day }}" aria-label="下一個交易日">{{ next_day.strftime('%m/%d') }} ›</a>{% endif %}
+</div>
+{%- endmacro %}
+
+{# 「這是什麼？」：開啟整頁共用的說明（_help_defs.html），不用 JavaScript #}
+{% macro help(type, text='?') -%}
+<button type="button" class="help" popovertarget="help-{{ type }}" aria-label="{{ info(type).label }}是什麼？">{{ text }}</button>
+{%- endmacro %}
+
+{% macro dot(tone) -%}<span class="dot {{ tone }}" aria-hidden="true"></span>{%- endmacro %}

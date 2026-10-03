@@ -1,0 +1,145 @@
+{% import "_macros.html" as m with context %}
+<section class="stock-head"{% if not export %} data-recent-symbol="{{ s.symbol }}" data-recent-name="{{ s.name }}"{% endif %}>
+  <div>
+    <h1><span class="dm">{{ s.symbol }}</span> {{ s.name }}</h1>
+    <div class="tags">
+      {% if s.industry %}<span class="tag">{{ s.industry }}</span>{% endif %}
+      <span class="tag">{{ {'TWSE': '上市', 'TPEX': '上櫃'}.get(s.market, '上市') }}{{ {'stock': '股票', 'etf': 'ETF', 'other': '其他'}[s.security_type] }}</span>
+      {% if s.listed_date %}<span class="tag std-only">{{ '上櫃' if s.market == 'TPEX' else '上市' }} {{ s.listed_date.strftime('%Y/%m/%d') }}</span>{% endif %}
+      {% if export %}<a class="small" href="#v-radar" data-back>‹ 返回</a>{% endif %}
+    </div>
+  </div>
+  {% if last %}
+  <div class="quote">
+    <div class="big {{ last.change|tone }}">{{ last.close|price }}</div>
+    <div class="{{ last.change|tone }} strong">
+      {{ last.change|signed }}{% if last.change is not none and last.close != last.change %}（{{ (last.change / (last.close - last.change))|ret }}）{% endif %}
+    </div>
+    <div class="muted small">{{ last.trade_date|day }} 收盤</div>
+    {% if not export %}
+    {# 盤中即時：只有比上面的收盤資料新的時候才出現 #}
+    <div class="live-quote needs-js" data-live-panel data-live-symbols="{{ s.symbol }}" data-day="{{ last.trade_date.strftime('%Y%m%d') }}" hidden>
+      <span class="live-dot" aria-hidden="true"></span><span data-live-status>盤中</span>
+      <b data-live-f="stock.price">–</b> <span data-live-f="stock.change_pct" data-live-tone="stock">–</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+{# ⑤ 為什麼被雷達注意：30 秒看懂 #}
+<section class="block why" aria-labelledby="why-{{ s.symbol }}">
+  <h2 id="why-{{ s.symbol }}">為什麼被雷達注意？</h2>
+  {% if story.flagged %}
+  <ul class="reasons">
+    {% for r in story.reasons %}
+    <li><span class="r-title">{{ m.dot(r.tone) }}{{ r.label }}{{ m.help(r.type) }}</span><span>{{ r.text }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">{% if last %}{{ last.trade_date.strftime('%m/%d') }} 這天沒有被雷達標記。{% endif %}
+    {% if story.recent %}最近一次是 {{ story.recent.date.strftime('%Y/%m/%d') }} 的「{{ story.recent.label }}」：{{ story.recent.text }}{% endif %}</p>
+  {% endif %}
+  {% if story.facts %}
+  <ul class="reasons facts">
+    {% for f in story.facts %}<li><span class="r-title">{{ m.dot(f.tone) }}{{ f.label }}</span><span>{{ f.text }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  <div class="simple">
+    <b>簡單理解</b>
+    <p>{{ story.summary }}</p>
+  </div>
+  <p class="small muted">只根據資料描述發生了什麼，不代表之後的走勢，也不是買賣建議。</p>
+</section>
+
+{% if last %}
+{# 基本股價資訊 #}
+<dl class="stats">
+  <div><dt>收盤價</dt><dd>{{ last.close|price }}</dd></div>
+  <div><dt>成交量</dt><dd>{{ last.volume|lots }} 張</dd></div>
+  <div><dt>成交金額</dt><dd>{{ last.turnover|yi }}</dd></div>
+  <div class="std-only"><dt>量比（前 20 日）</dt><dd>{{ '%.2f 倍'|format(last.vol_ratio|float) if last.vol_ratio is not none else '–' }}</dd></div>
+</dl>
+
+{# 價格走勢：先看幾個數字，需要時再展開完整 K 線（標準模式預設展開） #}
+<section class="block" aria-labelledby="trend-{{ s.symbol }}">
+  <h2 id="trend-{{ s.symbol }}">價格走勢</h2>
+  <dl class="tiles">
+    <div><dt>最近 5 日</dt><dd class="{{ last.ret_5d|tone }}">{{ last.ret_5d|ret }}</dd></div>
+    <div><dt>最近 20 日</dt><dd class="{{ last.ret_20d|tone }}">{{ last.ret_20d|ret }}</dd></div>
+    <div><dt>前 60 日最高</dt><dd>{{ last.high60|price }}</dd></div>
+    <div><dt>前 60 日最低</dt><dd>{{ last.low60|price }}</dd></div>
+  </dl>
+  <p class="small muted">報酬與高低點都已還原除權息、減資與分割，可以直接和收盤價比較。</p>
+  <details class="kline" data-std-open>
+    <summary>查看詳細 K 線 {% if range %}<span class="muted small">{{ range[0].strftime('%Y/%m/%d') }}～{{ range[1].strftime('%Y/%m/%d') }}</span>{% endif %}</summary>
+    <div class="legend small">
+      <span><i class="tri up"></i>偏多訊號</span><span><i class="tri down"></i>偏空訊號</span><span><i class="dia"></i>量能爆增（不分多空）</span><span><i class="dash"></i>除權息</span>
+      <span class="muted">滑過 K 線或標記可看數字；K 線為原始價，除權息日會跳空</span>
+    </div>
+    <div class="scroll">{{ price_svg|safe }}</div>
+  </details>
+</section>
+{% endif %}
+
+{# 以下是完整資料，標準模式顯示 #}
+<section class="block std-only">
+  <h2>三大法人買賣超 <span class="muted small">近 {{ flow_days }} 個交易日，單位：張</span></h2>
+  <div class="scroll">{{ flows_svg|safe }}</div>
+</section>
+
+<div class="cols even std-only">
+  <section class="block">
+    <h2>訊號紀錄 <span class="count">{{ signals|length }}</span></h2>
+    {% if signals %}
+    <div class="scroll tall"><table class="list">
+      <thead><tr><th>日期</th><th>訊號</th><th>依據</th><th class="num adv-only">之後 5 日</th><th class="num adv-only">之後 20 日</th><th class="num adv-only">全部股票</th></tr></thead>
+      <tbody>
+      {% for g in signals %}
+        <tr><td class="date">{{ g.trade_date.strftime('%Y/%m/%d') }}</td>
+          <td class="nowrap">{{ m.dot(tone_of(g.signal_type)) }}{{ TYPES[g.signal_type] }}</td>
+          <td>{{ describe(g) }}</td>
+          <td class="num adv-only {{ g.h5|tone }}">{{ g.h5|ret if g.h5 is not none else '未滿' }}</td>
+          <td class="num adv-only {{ g.h20|tone }}">{{ g.h20|ret if g.h20 is not none else '未滿' }}</td>
+          <td class="num adv-only muted">{{ g.b20|ret if g.b20 is not none else '–' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p class="empty">這段期間沒有訊號。</p>{% endif %}
+  </section>
+
+  <div class="stack">
+    <section class="block">
+      <h2>除權息</h2>
+      {% if actions %}
+      <div class="scroll"><table class="list">
+        <thead><tr><th>生效日</th><th>類型</th><th class="num">權值＋息值（元）</th><th class="num">參考價</th></tr></thead>
+        <tbody>
+        {% for a in actions %}
+          <tr><td class="date">{% if a.eff_date and a.eff_date != a.ex_date %}{{ a.eff_date.strftime('%Y/%m/%d') }}<br><span class="small muted">原訂 {{ a.ex_date.strftime('%m/%d') }}，休市順延</span>{% else %}{{ a.ex_date.strftime('%Y/%m/%d') }}{% endif %}</td>
+            <td>{{ {'dividend': '除息', 'rights': '除權', 'both': '除權息'}[a.action_type] }}</td>
+            <td class="num">{{ '%.2f'|format(a.value|float) }}</td><td class="num">{{ a.ref_price|price }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}<p class="empty">資料期間內沒有除權息。</p>{% endif %}
+    </section>
+
+    {% if peers %}
+    <section class="block">
+      <h2>同產業成交金額前幾名 <span class="muted small">{{ s.industry }}</span></h2>
+      <div class="scroll"><table class="list">
+        <thead><tr><th>股票</th><th class="num">收盤</th><th class="num">日報酬</th><th class="num">20 日</th></tr></thead>
+        <tbody>
+        {% for p in peers %}
+          <tr><td class="sym">{{ m.stock_link(p.symbol, p.name) }}</td>
+            <td class="num">{{ p.close|price }}</td>
+            <td class="num {{ p.ret_1d|tone }}">{{ p.ret_1d|ret }}</td>
+            <td class="num {{ p.ret_20d|tone }}">{{ p.ret_20d|ret }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+    {% endif %}
+  </div>
+</div>

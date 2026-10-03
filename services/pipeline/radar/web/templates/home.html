@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% set tab = 'home' %}
+{% block title %}{{ day|day }} 盤後｜台股市場雷達{% endblock %}
+{% block content %}
+{% include "_market_body.html" %}
+{% endblock %}

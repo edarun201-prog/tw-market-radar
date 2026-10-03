@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}離線中｜台股市場雷達{% endblock %}
+{% block content %}
+<section class="block offline">
+  <h1>目前連不到雷達</h1>
+  <p>可能是網路斷了，或是放網站的電腦沒有開。下面是你之前看過、存在這台裝置上的頁面，資料日期以頁面上寫的為準。</p>
+  <ul class="saved" id="saved" hidden></ul>
+  <p class="empty" id="saved-empty">這台裝置還沒有存下任何頁面。連上網路後看過的頁面，之後離線也能打開。</p>
+  <p><button type="button" class="primary" onclick="location.reload()">重新連線</button></p>
+</section>
+<script>
+(function () {
+  // 列出 service worker 存下來的頁面（見 /sw.js）
+  if (!('caches' in window)) return;
+  function label(u) {
+    if (u.pathname === '/') { var d = u.searchParams.get('date'); return d ? d.replace(/-/g, '/') + ' 盤後' : '今日市場（最後一次存下的）'; }
+    if (u.pathname.indexOf('/stock/') === 0) return '個股 ' + decodeURIComponent(u.pathname.slice(7));
+    if (u.pathname === '/about') return '資料與計算方式';
+    if (u.pathname === '/search') return u.searchParams.get('q') ? '搜尋「' + u.searchParams.get('q') + '」' : '搜尋';
+    return u.pathname;
+  }
+  caches.open('radar-pages-v1').then(function (c) { return c.keys(); }).then(function (keys) {
+    var list = document.getElementById('saved');
+    keys.slice().reverse().forEach(function (req) {
+      var u = new URL(req.url);
+      var li = document.createElement('li'), a = document.createElement('a');
+      a.href = u.pathname + u.search; a.textContent = label(u);
+      li.appendChild(a); list.appendChild(li);
+    });
+    if (keys.length) { list.hidden = false; document.getElementById('saved-empty').hidden = true; }
+  });
+})();
+</script>
+{% endblock %}
