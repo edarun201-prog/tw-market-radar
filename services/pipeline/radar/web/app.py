@@ -25,6 +25,8 @@ from radar.web import charts, queries as q
 
 HERE = Path(__file__).parent
 RECENT_DAYS = 10          # 個股今天沒有訊號時，往前找最近幾個交易日的訊號
+# K 線的時間範圍（交易日數）：資料不夠長的範圍不顯示，不自己補
+CHART_RANGES = [("1M", 21), ("3M", 63), ("6M", 120), ("1Y", 250)]
 
 
 def _sector_ranking(sectors: list[dict], k: int = 5) -> dict:
@@ -38,9 +40,15 @@ def _sector_ranking(sectors: list[dict], k: int = 5) -> dict:
 def radar_sections(rows: list[dict]) -> list[dict]:
     """今日雷達：依類別（成交量／價格／法人動向）分組，每種訊號都列出（0 則也列，讓新手知道雷達在看什麼）。"""
     by_type: dict[str, list[dict]] = {t: [] for t in explain.SIGNAL_INFO}
+    labels: dict[str, list[str]] = {}
     for r in rows:
-        by_type.setdefault(r["signal_type"], []).append(r | {"sentence": explain.signal_sentence(r),
-                                                            "evidence_text": explain.evidence_text(r)})
+        labels.setdefault(r["symbol"], []).append(explain.info(r["signal_type"]).label)
+    for r in rows:
+        by_type.setdefault(r["signal_type"], []).append(r | {
+            "sentence": explain.signal_sentence(r), "evidence_text": explain.evidence_text(r),
+            "metrics": explain.signal_metrics(r),
+            # 同一檔股票今天的其他訊號（卡片上「也出現」）
+            "also": [x for x in labels[r["symbol"]] if x != explain.info(r["signal_type"]).label]})
     sections = []
     for cat, cat_label in explain.CATEGORIES.items():
         items = [{"info": i, "rows": by_type[i.type]} for i in explain.SIGNAL_INFO.values() if i.category == cat]
@@ -79,18 +87,32 @@ def home_context(conn, day: date, requested: date | None = None) -> dict:
     ov = q.market_overview(conn, day)
     rows = q.signals_on(conn, day)
     prev_day, next_day = q.neighbor_dates(conn, day)
+    state = explain.market_state(ov["index"], ov["breadth"])
     return {
         "day": day, "requested": requested, "ov": ov, "total": len(rows),
         # 盤中即時：雷達名單（前一個交易日盤後標記的股票）一次查即時報價，最多 live.MAX_SYMBOLS 檔
         "live_symbols": list(dict.fromkeys(r["symbol"] for r in rows))[:live.MAX_SYMBOLS],
         # 看過去的日子時，在「今日市場」與「今日雷達」之間切換要留在同一天
         "date_qs": "" if next_day is None else f"?date={day}",
-        "state": explain.market_state(ov["index"], ov["breadth"]),
+        "state": state,
+        "key_points": explain.key_points(state, ov["index"], ov["breadth"], rows, ov["sectors"]),
+        "digest": explain.anomaly_digest(rows),
+        "data_status": q.data_status(conn, day),
         "radar": radar_sections(rows), "hotspots": hotspots(rows), "multi": multi_signal_stocks(rows),
         "prev_day": prev_day, "next_day": next_day,
         "spark": charts.sparkline([(r["trade_date"], r["close"]) for r in ov["index_history"]]),
         "sectors": _sector_ranking(ov["sectors"]),
     }
+
+
+def price_charts(prices: list[dict], sigs: list[dict], acts: list[dict]) -> list[dict]:
+    """K 線的各個時間範圍（1M／3M／6M／1Y）；預設 3M，資料不夠時改成最長的那個。"""
+    avail = [(label, n) for label, n in CHART_RANGES if len(prices) >= n]
+    if not avail and prices:
+        avail = [(f"{len(prices)} 日", len(prices))]
+    default = "3M" if any(label == "3M" for label, _ in avail) else (avail[-1][0] if avail else None)
+    return [{"label": label, "days": n, "default": label == default,
+             "svg": charts.price_chart(prices[-n:], sigs, acts, TYPES)} for label, n in avail]
 
 
 def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of: date | None = None) -> dict:
@@ -106,7 +128,8 @@ def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of:
     return {
         "s": prof, "last": last, "signals": sigs, "actions": acts, "flow_days": flow_days,
         "story": explain.stock_story(last, today, recent),
-        "price_svg": charts.price_chart(prices, sigs, acts, TYPES),
+        "chips": [explain.signal_chip(x) for x in today][:3],
+        "kcharts": price_charts(prices, sigs, acts),
         "flows_svg": charts.flows_chart(q.stock_flows(conn, prof["id"], flow_days, as_of)),
         "peers": q.industry_peers(conn, prof["id"], last["trade_date"]) if last and prof["industry"] else [],
         "range": (prices[0]["trade_date"], prices[-1]["trade_date"]) if prices else None,
@@ -229,7 +252,7 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
         prof = q.stock_profile(conn, symbol.upper())
         if prof is None:
             raise HTTPException(404, f"找不到證券代號 {symbol}")
-        return page(request, "stock.html", stock_context(conn, prof))
+        return page(request, "stock.html", stock_context(conn, prof) | backtest_context(conn))
 
     @app.get("/about", response_class=HTMLResponse)
     def about(request: Request, conn=Depends(db)):
@@ -251,12 +274,18 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
         return page(request, "offline.html", {})
 
     @app.get("/search", response_class=HTMLResponse)
-    def search(request: Request, q_: str = Query("", alias="q"), conn=Depends(db)):
+    def search(request: Request, q_: str = Query("", alias="q"), f: str = Query("", description="條件搜尋：vol3／up5／high60／fbuy"),
+               conn=Depends(db)):
+        if f in q.SCREENS:
+            day = q.resolve_date(conn, None)
+            rows, total = q.screen_stocks(conn, day, f) if day else ([], 0)
+            return page(request, "search.html", {"query": "", "results": [], "screens": q.SCREENS, "screen": f,
+                                                 "screened": rows, "screen_total": total, "day": day})
         results = q.search_stocks(conn, q_)
         exact = [r for r in results if r["symbol"] == q_.strip().upper() or r["name"] == q_.strip()]
         if len(exact) == 1 or len(results) == 1:
             return RedirectResponse(f"/stock/{(exact or results)[0]['symbol']}", status_code=303)
-        return page(request, "search.html", {"query": q_, "results": results})
+        return page(request, "search.html", {"query": q_, "results": results, "screens": q.SCREENS, "screen": ""})
 
     # ---- JSON API ----------------------------------------------------------------
     @app.get("/api/market")

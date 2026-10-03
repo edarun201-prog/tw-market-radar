@@ -19,7 +19,7 @@ flowchart LR
 | Data | `adapters/`、`normalizers/`、`repository.py`、`features.py`、`audit.py` | 抓官方資料、驗證、入庫、還原價、稽核 | 不判斷異常 |
 | Signal Engine | `signals.py` | 門檻、冷卻期、`evidence`（判斷依據的數字）、版本號 | 不產生文字 |
 | Explanation Layer | `explain.py`、`formatting.py` | 每種訊號的分類、方向、「是什麼／代表什麼／不代表什麼」、由常數產生的規則文字、市場狀況、個股「為什麼被雷達注意」與「簡單理解」 | 不查資料庫、不給建議 |
-| UI | `web/app.py`、`web/templates/`、`web/static/` | 版面、模式、說明彈窗、K 線分層、App 外殼 | 不寫死門檻或定義 |
+| UI | `web/app.py`、`web/templates/`、`web/static/` | 版面、資訊層級、模式、說明彈窗、K 線時間範圍、App 外殼 | 不寫死門檻或定義 |
 | AI | `summary.py` | 用 facts 寫摘要，寫入前檢查每個數字與用語 | 看不到 facts 以外的資料 |
 
 ## Signal object
@@ -38,6 +38,20 @@ flowchart LR
 ```
 
 （`/api/signals?type=vol_spike` 2026-09-24 的實際回應。）`/api/signal-types` 列出所有訊號的定義與規則；`/api/stocks/{symbol}/explain` 回傳個股的「為什麼被雷達注意」。
+
+## 閱讀流程與資訊層級
+
+目標：10 秒知道今天市場怎麼樣、30 秒知道有哪些異常、1 分鐘知道某檔股票為什麼出現在雷達、3 分鐘可以繼續查 K 線、法人、歷史訊號、同產業。
+
+| 頁面 | 順序 | 來源（都是固定規則，不用 AI） |
+| --- | --- | --- |
+| 今日市場 | 市場狀態與指數（Level 1）→ 漲跌家數、成交金額、櫃買指數（Level 2）→ 今日一句話 → 今日 3 大重點 → 雷達總覽 → 類股輪動 → 詳細市場資料（Level 3，可展開；進階模式有資料品質與更新時間） | `market_state`、`key_points` |
+| 今日雷達 | 分類統計 → 今日異常摘要（訊號數 → 量比 → 今日漲跌幅排序）→ 分類頁籤 → 每一類：歷史訊號表現、判斷條件（進階）、桌面表格／手機卡片 | `anomaly_digest`、`signal_metrics`、`past_performance` |
+| 個股 | 基本資訊與今日為什麼被注意 → 為什麼被雷達抓到 → 數據狀態 → 接下來可以查看 → 價格走勢（1M／3M／6M／1Y，資料不夠長的不顯示）→ 法人 → 歷史訊號 → 同產業 → 其他 | `signal_chip`、`stock_story` |
+| 搜尋 | 代號或名稱；條件搜尋（量比 ≥ 3 倍、今日漲幅 ≥ 5%、創 60 日新高、外資連買 5 日以上） | `queries.SCREENS` |
+
+頁籤與 K 線範圍都是單選按鈕＋CSS，不需要程式，所以 iPhone 的檔案預覽與公開網頁（匯出檔）也能切換。
+「歷史訊號表現」用中位數，和同一天全部股票比；筆數少於 30 就只寫「歷史樣本不足」。顏色只用在漲跌幅（紅漲綠跌），資訊用藍色。
 
 ## App 模式（PWA）
 

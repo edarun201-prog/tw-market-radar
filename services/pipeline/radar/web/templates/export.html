@@ -33,6 +33,10 @@
       <form class="file-search" role="search" id="fs-form">
         <input id="fq" type="search" placeholder="代號或名稱，例：2330、台積電" aria-label="搜尋股票" enterkeyhint="search" autocomplete="off">
       </form>
+      <div class="screens" role="group" aria-label="條件搜尋">
+        <span class="lbl">條件搜尋</span>
+        {% for k, sc in screens.items() %}<button type="button" class="chip-link" data-screen="{{ k }}" aria-pressed="false">{{ sc[0] }}</button>{% endfor %}
+      </div>
       <p class="small muted" id="fs-msg" aria-live="polite">可以查這天所有上市股票與 ETF 的收盤和漲跌（共 {{ quotes|length }} 檔）；有個股頁的，點名稱就能打開。</p>
       <ul class="fs-list" id="fs-list" hidden></ul>
     </div>
@@ -49,7 +53,7 @@
 
 {% for st in stocks %}
 <article class="view stock-section" id="s-{{ st.s.symbol }}" data-view="stock" data-title="{{ st.s.symbol }} {{ st.s.name }}">
-  {% with s=st.s, last=st.last, signals=st.signals, actions=st.actions, price_svg=st.price_svg, flows_svg=st.flows_svg,
+  {% with s=st.s, last=st.last, signals=st.signals, actions=st.actions, kcharts=st.kcharts, chips=st.chips, flows_svg=st.flows_svg,
           peers=st.peers, range=st.range, flow_days=st.flow_days, story=st.story %}
   {% include "_stock_body.html" %}
   {% endwith %}
@@ -100,7 +104,18 @@
 (function () {
   var data = JSON.parse(document.getElementById('quote-index').textContent);
   var input = document.getElementById('fq'), list = document.getElementById('fs-list'), msg = document.getElementById('fs-msg');
-  var hint = msg.textContent, LIMIT = 20;
+  var hint = msg.textContent, LIMIT = 20, screen = '';
+  // 條件搜尋（和網站的 /search?f= 同樣的條件與排序；只看普通股）：[10] 量比 [11] 創 60 日新高 [12] 外資連買 [13] 漲跌幅 [14] 普通股 [15] 成交金額
+  var SCREENS = {
+    vol3: { label: '{{ screens.vol3[0] }}', ok: function (r) { return r[10] !== null && r[10] >= 3; }, by: function (r) { return r[10]; } },
+    up5: { label: '{{ screens.up5[0] }}', ok: function (r) { return r[13] !== null && r[13] >= 0.05; }, by: function (r) { return r[13]; } },
+    high60: { label: '{{ screens.high60[0] }}', ok: function (r) { return r[11] === 1; }, by: function (r) { return r[15] || 0; } },
+    fbuy: { label: '{{ screens.fbuy[0] }}', ok: function (r) { return r[12] === 1; }, by: function (r) { return r[15] || 0; } }
+  };
+  function screened(key) {
+    var sc = SCREENS[key];
+    return data.filter(function (r) { return r[14] === 1 && sc.ok(r); }).sort(function (a, b) { return sc.by(b) - sc.by(a); });
+  }
   function find(q) {
     var up = q.toUpperCase(), low = q.toLowerCase();
     var hits = data.filter(function (r) { return r[0].indexOf(up) === 0 || r[1].toLowerCase().indexOf(low) >= 0; });
@@ -112,19 +127,21 @@
   }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
   function render() {
-    var q = input.value.trim(), hits = q ? find(q) : [];
+    var q = input.value.trim(), hits = screen ? screened(screen) : q ? find(q) : [], limit = screen ? 50 : LIMIT;
     list.textContent = '';
     list.hidden = !hits.length;
-    if (!q) { msg.textContent = hint; return; }
-    if (!hits.length) { msg.textContent = '找不到符合「' + q + '」的上市證券。可以輸入代號開頭（例：23）或名稱的一部分（例：台積）。'; return; }
-    msg.textContent = hits.length > LIMIT ? '共 ' + hits.length + ' 筆，先列前 ' + LIMIT + ' 筆；多打幾個字可以縮小範圍。' : '共 ' + hits.length + ' 筆';
-    hits.slice(0, LIMIT).forEach(function (r) {
+    if (screen) {
+      msg.textContent = '「' + SCREENS[screen].label + '」：' + (hits.length ? '符合 ' + hits.length + ' 檔' + (hits.length > limit ? '，列出前 ' + limit + ' 檔' : '') : '這天沒有符合的股票') + '。條件只是當天的原始數字，不是評分或推薦。';
+    } else if (!q) { msg.textContent = hint; return; }
+    else if (!hits.length) { msg.textContent = '找不到符合「' + q + '」的股票。可以輸入代號開頭（例：23）或名稱的一部分（例：台積）。'; return; }
+    else msg.textContent = hits.length > LIMIT ? '共 ' + hits.length + ' 筆，先列前 ' + LIMIT + ' 筆；多打幾個字可以縮小範圍。' : '共 ' + hits.length + ' 筆';
+    hits.slice(0, limit).forEach(function (r) {
       var li = el('li'), main = el('div', 'fs-main'), quote = el('div', 'fs-quote');
       var name = el(r[8] ? 'a' : 'span', 'fs-name');
       if (r[8]) name.href = '#s-' + r[0];
       name.appendChild(el('b', '', r[0])); name.appendChild(document.createTextNode(' ' + r[1]));
       main.appendChild(name);
-      main.appendChild(el('span', 'small muted', [r[2], r[3] === '股票' ? '' : r[3], '成交 ' + r[7]].filter(Boolean).join('・')));
+      main.appendChild(el('span', 'small muted', [r[2], r[3] === '股票' ? '' : r[3], '成交 ' + r[7], r[10] !== null ? '量比 ' + r[10].toFixed(1) + '×' : ''].filter(Boolean).join('・')));
       if (r[9]) main.appendChild(el('span', 'small', '今日雷達：' + r[9] + (r[8] ? '（點名稱看個股頁）' : '（這個檔案沒有收錄它的個股頁）')));
       else main.appendChild(el('span', 'small muted', '今天沒有被雷達標記'));
       quote.appendChild(el('span', 'num', r[4]));
@@ -132,7 +149,14 @@
       li.appendChild(main); li.appendChild(quote); list.appendChild(li);
     });
   }
-  input.addEventListener('input', render);
+  input.addEventListener('input', function () { setScreen(''); render(); });
+  function setScreen(key) {
+    screen = key;
+    document.querySelectorAll('[data-screen]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.screen === key)); });
+  }
+  document.querySelectorAll('[data-screen]').forEach(function (b) {
+    b.addEventListener('click', function () { setScreen(screen === b.dataset.screen ? '' : b.dataset.screen); if (screen) input.value = ''; render(); });
+  });
   document.getElementById('fs-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var q = input.value.trim(), hits = q ? find(q) : [];

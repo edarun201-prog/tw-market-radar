@@ -1,46 +1,82 @@
 {% import "_macros.html" as m with context %}
 
-{# ③ 今日雷達：10 秒知道有哪些異常；先看分類，點開才看股票 #}
-<section class="page-head" aria-labelledby="radar-title">
+{# 今日雷達：10 秒知道有哪些異常 → 異常摘要（最值得注意的幾檔）→ 分類頁籤 → 每一類的股票（桌面表格、手機卡片）。
+   頁籤是單選按鈕＋CSS，不需要程式（iPhone 的檔案預覽也能切換）。 #}
+<section class="page-head glass" aria-labelledby="radar-title">
   <div class="hero-head">
     <div class="title"><p class="eyebrow" aria-hidden="true">Radar</p><h1 id="radar-title">今日雷達 <span class="count">{{ total }} 個訊號</span></h1></div>
     {{ m.daynav('/radar') }}
   </div>
   {% if requested and requested != day %}<p class="note">{{ requested }} 沒有開市，顯示在這之前最近的交易日。</p>{% endif %}
+  <dl class="cat-sum">
+    {% for sec in radar %}<div><dt>{{ sec.label }}</dt><dd>{{ sec.total }}</dd></div>{% endfor %}
+  </dl>
 </section>
+
+{% if digest %}
+<section class="block" aria-labelledby="digest-title">
+  <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">Digest</p><h2 id="digest-title">今日異常摘要</h2></div>
+    <span class="count">資料異常程度較高的 {{ digest|length }} 檔</span></div>
+  <ol class="cards digest">
+    {% for d in digest %}
+    <li class="card glass">
+      <span class="card-rank" aria-hidden="true">{{ '%02d'|format(loop.index) }}</span>
+      <div class="card-head"><span class="sym">{{ m.stock_link(d.symbol, d.name) }}</span><span class="muted small">{{ d.industry or '' }}</span></div>
+      <div class="tags">{% for t in d.tags %}<span class="tag">{{ m.dot(t.tone) }}{{ t.label }}</span>{% endfor %}</div>
+      {{ m.metrics(d.metrics) }}
+      <p class="card-why"><span class="muted small">為什麼被雷達抓到？</span>{{ d.sentence }}</p>
+      {% set href = stock_href(d.symbol) %}{% if href %}<a class="card-more" href="{{ href }}">查看個股 →</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  <p class="small muted">依「同時出現的訊號數 → 量比 → 今日漲跌幅」排序，只代表這些資料和平常差異比較大；不是推薦，也不代表好壞。</p>
+</section>
+{% endif %}
 
 <div class="home-grid">
   <section class="block radar" id="radar" aria-label="各類訊號">
     <p class="lead beg-only">點分類就能看是哪些股票、為什麼被雷達抓到；點股票名稱看它的完整說明。按 <span class="help static" aria-hidden="true">?</span> 看名詞說明。</p>
+    <input class="rt" type="radio" name="radar-tab" id="rt-all" checked>
+    {% for sec in radar %}<input class="rt" type="radio" name="radar-tab" id="rt-{{ sec.category }}">{% endfor %}
+    <div class="rtabs" role="group" aria-label="訊號類別">
+      <label for="rt-all">全部 <span>{{ total }}</span></label>
+      {% for sec in radar %}<label for="rt-{{ sec.category }}">{{ sec.label|replace('法人動向', '法人') }} <span>{{ sec.total }}</span></label>{% endfor %}
+    </div>
     {% for sec in radar %}
-    <div class="radar-cat">
+    <div class="radar-cat" data-cat="{{ sec.category }}">
       <h2 class="cat-title">{{ sec.label }}<span class="muted">・{{ sec.total }}</span></h2>
       {% for it in sec.types %}
       {% set n = it.rows|length %}
       {% set head %}
         {{ m.dot(it.info.tone) }}<span class="r-name">{{ it.info.label }}{{ m.help(it.info.type) }}</span>
-        <span class="r-hint beg-only">{{ it.info.what }}{% if bt is defined and bt.verdicts[it.info.type] and bt.verdicts[it.info.type].key != 'few' %}
-          <span class="r-past">過去：{{ bt.verdicts[it.info.type].label }}</span>{% endif %}</span>
+        <span class="r-hint beg-only">{{ it.info.what }}</span>
         <span class="r-count">{{ n }}</span>
       {% endset %}
       {% if n %}
       <details class="radar-row" id="{{ it.info.type }}">
         <summary>{{ head }}</summary>
-        <div class="scroll"><table class="list">
-          <thead><tr><th>股票</th><th class="std-only">產業</th><th class="beg-only">為什麼被雷達抓到</th><th class="std-only">依據</th><th class="num std-only">收盤</th><th class="num">今日漲跌</th></tr></thead>
-          <tbody>
-          {% for r in it.rows %}
-            <tr>
-              <td class="sym">{{ m.stock_link(r.symbol, r.name) }}</td>
-              <td class="muted std-only">{{ r.industry or '' }}</td>
-              <td class="beg-only">{{ r.sentence }}</td>
-              <td class="std-only">{{ r.evidence_text }}</td>
-              <td class="num std-only">{{ r.close|price }}</td>
-              <td class="num {{ r.day_pct|tone }}">{{ r.day_pct|ret }}</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table></div>
+        <div class="rr-body">
+          {{ m.past(it.info.type) }}
+          <p class="adv-only small rule"><b>判斷條件</b>{{ it.info.rule }}；同一檔 {{ it.info.cooldown }} 個交易日內不重複標記。</p>
+          {# 桌面：表格 #}
+          <div class="scroll rv-table"><table class="list">
+            <thead><tr><th>股票</th><th class="std-only">產業</th><th class="beg-only">為什麼被雷達抓到</th><th class="std-only">依據</th><th class="num std-only">收盤</th><th class="num">今日漲跌</th></tr></thead>
+            <tbody>
+            {% for r in it.rows %}
+              <tr>
+                <td class="sym">{{ m.stock_link(r.symbol, r.name) }}</td>
+                <td class="muted std-only">{{ r.industry or '' }}</td>
+                <td class="beg-only">{{ r.sentence }}</td>
+                <td class="std-only">{{ r.evidence_text }}</td>
+                <td class="num std-only">{{ r.close|price }}</td>
+                <td class="num {{ r.day_pct|tone }}">{{ r.day_pct|ret }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table></div>
+          {# 手機：卡片 #}
+          <ol class="cards rv-cards">{% for r in it.rows %}{{ m.signal_card(r, it.info) }}{% endfor %}</ol>
+        </div>
       </details>
       {% else %}
       <div class="radar-row empty">{{ head }}</div>

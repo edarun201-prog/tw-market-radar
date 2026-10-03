@@ -55,7 +55,7 @@ def test_past_day_stock_sections_stop_at_that_day(conn, market, tmp_path):  # no
     section = html[start:html.index("</article>", start)]
     assert f"{d:%Y/%m/%d}" in section                                         # 收盤日是匯出的那天
     assert f"{latest:%Y/%m/%d}" not in section                                 # 看不到之後的資料
-    assert "為什麼被雷達注意" in section and "沒有被雷達標記" not in section    # 那天有訊號，說明也是那天的
+    assert "為什麼被雷達抓到" in section and "沒有被雷達標記" not in section    # 那天有訊號，說明也是那天的
 
 
 def test_pages_switch_without_javascript(conn, market, tmp_path):  # noqa: F811

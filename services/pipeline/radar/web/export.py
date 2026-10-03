@@ -23,7 +23,8 @@ SECURITY_TYPES = {"stock": "股票", "etf": "ETF", "other": "其他"}
 
 def quote_index(conn, d: date, ctx: dict, included: set[str]) -> list[list]:
     """離線搜尋用的索引：當天每一檔上市證券一列，數字先照網站的格式排好，瀏覽器只負責比對與顯示。
-    欄位：代號、名稱、產業、類型、收盤、漲跌幅、漲跌方向、成交金額、檔案裡有沒有個股段落、今天的訊號。"""
+    欄位：代號、名稱、產業、類型、收盤、漲跌幅、漲跌方向、成交金額、檔案裡有沒有個股段落、今天的訊號，
+    以及條件搜尋用的原始數字：量比、創 60 日新高、外資連買、漲跌幅（小數）、是不是普通股、成交金額（元）。"""
     labels: dict[str, list[str]] = {}
     for sec in ctx["radar"]:
         for it in sec["types"]:
@@ -32,8 +33,14 @@ def quote_index(conn, d: date, ctx: dict, included: set[str]) -> list[list]:
     return [[r["symbol"], r["name"], r["industry"] or "",
              ("上櫃" if r.get("market") == "TPEX" else "") + SECURITY_TYPES.get(r["security_type"], ""),
              fmt_price(r["close"]), fmt_ret(r["day_pct"]), tone(r["day_pct"]), fmt_yi(r["turnover"]),
-             int(r["symbol"] in included), "、".join(labels.get(r["symbol"], []))]
+             int(r["symbol"] in included), "、".join(labels.get(r["symbol"], [])),
+             _round(r["vol_ratio"], 2), int(r["new_high"]), int(r["foreign_buy"]), _round(r["day_pct"], 4),
+             int(r["security_type"] == "stock"), _round(r["turnover"], 0)]
             for r in q.day_quotes(conn, d)]
+
+
+def _round(v, n: int):
+    return None if v is None else round(float(v), n)
 
 
 def render_day(conn, d: date) -> str:
@@ -51,6 +58,7 @@ def render_day(conn, d: date) -> str:
             "stocks": stocks,
             "omitted": len(symbols) - len(stocks),
             "quotes": quote_index(conn, d, ctx, included),
+            "screens": q.SCREENS,
             "stock_href": lambda symbol: f"#s-{symbol}" if symbol in included else "",   # 沒有收錄的只顯示文字
             "inline_css": (HERE / "static" / "style.css").read_text(encoding="utf-8"),
             "icon_uri": "data:image/svg+xml;base64," + base64.b64encode((HERE / "static" / "icon.svg").read_bytes()).decode(),

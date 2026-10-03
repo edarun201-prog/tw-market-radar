@@ -99,8 +99,9 @@ def test_postponed_ex_date_and_neutral_volume_spike(conn, client):
 
 def test_home_reading_order_and_modes(client, market):
     html = client.get("/market").text
-    order = [html.index(s) for s in ("今日市場", "今日雷達", "類股指數漲跌")]
-    assert order == sorted(order)                                              # 大盤 → 雷達總覽 → 類股
+    # 市場總覽 → 今日一句話 → 3 大重點 → 雷達總覽 → 類股輪動 → 詳細市場資料
+    order = [html.index(s) for s in ('id="market-title"', "今日一句話", 'id="kp-title"', 'id="brief-title"', 'id="sector-title"', 'id="market-data"')]
+    assert order == sorted(order)
     radar = client.get("/radar", params={"date": str(market[40])}).text      # 這天有訊號
     assert "市場熱點" in radar and '<details class="radar-row"' in radar       # 雷達頁：完整清單與熱點
     assert radar.count('id="help-vol_spike"') == 1
@@ -111,9 +112,14 @@ def test_home_reading_order_and_modes(client, market):
 
 def test_stock_page_explains_why(client, market):
     html = client.get("/stock/2330").text
-    assert "為什麼被雷達注意？" in html and "簡單理解" in html
-    assert html.index("為什麼被雷達注意？") < html.index("查看詳細 K 線")        # 先說原因，再看 K 線
-    assert "data-std-open" in html                                             # 新手模式收起 K 線
+    assert "為什麼被雷達抓到？" in html and "簡單理解" in html
+    # 基本資訊 → 為什麼 → 數據狀態 → 研究路徑 → K 線 → 法人 → 歷史訊號
+    order = [html.index(s) for s in ('class="stock-head', "為什麼被雷達抓到？", "數據狀態", "接下來可以查看", 'id="price-2330"',
+                                     'id="flows-2330"', 'id="history-2330"')]
+    assert order == sorted(order)
+    assert '<details class="kline"' not in html and 'class="kchart scroll"' in html   # K 線不再收起來
+    for anchor in re.findall(r'href="#([a-z]+-2330)"', html):                   # 研究路徑的每個連結都有對應段落
+        assert f'id="{anchor}"' in html
 
 
 def test_about_page_is_generated_from_engine_constants(client, market):
@@ -224,3 +230,46 @@ def test_landing_page(client, market):
     assert "Trusted by" not in html and "Enterprises" not in html               # 不放不實的背書
     assert "臺灣證券交易所" in html
     assert client.get("/market").status_code == 200 and "今日市場" in client.get("/market").text
+
+
+ADVICE_WORDS = ("建議", "值得", "看好", "看壞", "應該買", "應該賣", "逢低", "布局", "目標價", "必漲", "必跌", "買點", "賣點", "推薦", "勝率")
+
+
+def _no_advice_in_page(html: str):
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"(不是|不提供任何|不提供|不構成投資|也不是)[^。<]{0,14}(建議|推薦)", "", text)   # 聲明本身不算
+    assert not [w for w in ADVICE_WORDS if w in text]
+
+
+def test_market_page_key_points_and_levels(client, market):
+    day = market[40]                                                            # 這天有訊號
+    html = client.get("/market", params={"date": str(day)}).text
+    assert '<b class="big-num">' in html and "今日市場狀態" in html and "今日一句話" in html
+    points = re.findall(r'<li class="kp glass">', html)
+    assert len(points) == 2                       # 市場、雷達（測試資料只有一個類股指數，沒有類股的比較）
+    assert 'href="#market-data"' in html and f'href="/radar?date={day}#vol_spike"' in html
+    assert 'id="market-data" data-std-open' in html and 'id="sectors"' in html
+    assert "資料品質與更新時間" in html                                            # 進階模式才顯示（adv-only）
+    _no_advice_in_page(html)
+
+
+def test_radar_tabs_digest_and_cards(client, market):
+    day = market[40]
+    html = client.get("/radar", params={"date": str(day)}).text
+    assert 'id="rt-all" checked' in html and all(f'id="rt-{c}"' in html for c in ("volume", "price", "flows"))
+    assert all(f'data-cat="{c}"' in html for c in ("volume", "price", "flows"))
+    assert "今日異常摘要" in html and '<ol class="cards digest">' in html
+    assert 'class="scroll rv-table"' in html and '<ol class="cards rv-cards">' in html   # 桌面表格、手機卡片
+    assert "為什麼被雷達抓到？" in html and "歷史訊號表現" in html
+    _no_advice_in_page(html)
+
+
+def test_search_filters(client, market):
+    day = market[40]
+    html = client.get("/search").text
+    assert all(f'href="/search?f={k}"' in html for k in ("vol3", "up5", "high60", "fbuy"))
+    r = client.get("/search", params={"f": "vol3"})
+    assert r.status_code == 200 and 'aria-pressed="true"' in r.text and "不是評分或推薦" in r.text
+    assert client.get("/search", params={"f": "nope"}).status_code == 200      # 不認得的條件就是一般搜尋頁
+    _no_advice_in_page(r.text)
+    _no_advice_in_page(client.get("/stock/2330").text)

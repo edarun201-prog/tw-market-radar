@@ -1,67 +1,74 @@
 {% import "_macros.html" as m with context %}
-{% set i = ov.index %}{% set b = ov.breadth %}
+{% set i = ov.index %}{% set b = ov.breadth %}{% set o, ob = ov.otc, ov.otc_breadth %}
+{# 今日市場的閱讀順序：① 市場總覽（狀態 → 指數 → 漲跌家數 → 成交金額）② 今日一句話 ③ 今天值得注意的 3 件事
+   ④ 今日雷達 ⑤ 類股輪動 ⑥ 詳細市場資料。數字的視覺重量依層級遞減：Level 1 一定要看、Level 2 可能需要、Level 3 進階才需要。 #}
 
-{# ① 今日市場：3 秒看懂今天大盤 #}
 {% include "_live_panel.html" %}
 
-<section class="hero" id="top" aria-labelledby="market-title">
+<section class="hero glass" id="top" aria-labelledby="market-title">
   <div class="hero-head">
     <div class="title"><p class="eyebrow" aria-hidden="true">Market</p><h1 id="market-title">今日市場</h1></div>
     {{ m.daynav('/market') }}
   </div>
   {% if requested and requested != day %}<p class="note">{{ requested }} 沒有開市，顯示在這之前最近的交易日。</p>{% endif %}
-  <div class="state-line">
-    <span class="state {{ state.tone }}">{{ state.label }}</span>
+
+  {# Level 1：市場狀態與加權指數 #}
+  <div class="l1">
+    <div class="l1-state">
+      <span class="lbl">今日市場狀態</span>
+      <span class="state {{ state.tone }}">{{ state.label }}</span>
+    </div>
+    <div class="l1-index">
+      <span class="lbl">加權指數</span>
+      {% if i %}
+      <div class="l1-num"><b class="big-num">{{ i.close|price }}</b>
+        <span class="l1-chg {{ i.change|tone }}">{{ i.change_pct|pct }}<small>{{ i.change|signed }} 點</small></span></div>
+      {% else %}<div class="l1-num"><b class="big-num">–</b></div>{% endif %}
+    </div>
+  </div>
+
+  {# Level 2：漲跌家數、成交金額、櫃買指數（家數不上色，只有漲跌幅用紅綠） #}
+  <dl class="keyfig">
+    <div><dt>{{ m.dot('up') }}上漲家數</dt><dd>{{ b.advancers if b else '–' }}</dd></div>
+    <div><dt>{{ m.dot('down') }}下跌家數</dt><dd>{{ b.decliners if b else '–' }}</dd></div>
+    <div><dt>成交金額</dt><dd>{{ b.total_turnover|yi if b else '–' }}</dd></div>
+    <div><dt>櫃買指數</dt><dd>{% if o %}{{ o.close|price }} <span class="{{ o.change|tone }}">{{ o.change_pct|pct }}</span>{% else %}<span class="muted">資料不足</span>{% endif %}</dd></div>
+  </dl>
+
+  {# 今日一句話：固定規則（explain.market_state），只描述資料 #}
+  <div class="oneline">
+    <span class="lbl">今日一句話</span>
     <p>{{ state.sentence }}</p>
   </div>
-  <dl class="keyfig">
-    <div><dt>加權指數</dt><dd>{% if i %}<b>{{ i.close|price }}</b> <span class="{{ i.change|tone }}">{{ i.change_pct|pct }}</span>{% else %}–{% endif %}</dd></div>
-    <div><dt>上漲家數</dt><dd class="up">{{ b.advancers if b else '–' }}</dd></div>
-    <div><dt>下跌家數</dt><dd class="down">{{ b.decliners if b else '–' }}</dd></div>
-    <div><dt>成交金額</dt><dd>{{ b.total_turnover|yi if b else '–' }}</dd></div>
-  </dl>
-  {% set o, ob = ov.otc, ov.otc_breadth %}
-  {% if o or ob %}
-  {# 上櫃：櫃買中心的資料（上面的數字都是上市） #}
-  <p class="otc-line small"><b>上櫃</b>
-    {% if o %}<span>櫃買指數 {{ o.close|price }} <span class="{{ o.change|tone }}">{{ o.change_pct|pct }}</span></span>{% endif %}
-    {% if ob %}<span>上漲 <span class="up">{{ ob.advancers if ob.advancers is not none else '–' }}</span>・下跌 <span class="down">{{ ob.decliners if ob.decliners is not none else '–' }}</span></span>
-    <span>成交金額 {{ ob.total_turnover|yi }}</span>{% endif %}
-  </p>
-  {% endif %}
-  {% if b %}
-  <div class="hero-detail std-only">
-    <div class="spark-box">{{ spark|safe }}<span class="small muted">加權指數近 {{ ov.index_history|length }} 個交易日，今天 {{ i.change|signed if i else '–' }} 點</span></div>
-    <dl class="kv">
-      <div><dt>平盤</dt><dd>{{ b.unchanged }}</dd></div>
-      <div><dt>漲停</dt><dd class="up">{{ b.limit_up if b.limit_up is not none else '–' }}</dd></div>
-      <div><dt>跌停</dt><dd class="down">{{ b.limit_down if b.limit_down is not none else '–' }}</dd></div>
-      <div><dt>未成交</dt><dd>{{ b.no_trade if b.no_trade is not none else '–' }}</dd></div>
-      <div><dt>成交量</dt><dd>{{ b.total_volume|lots }} 張</dd></div>
-      <div><dt>成交筆數</dt><dd>{{ '{:,}'.format(b.total_trades) if b.total_trades else '–' }}</dd></div>
-    </dl>
-  </div>
-  {% endif %}
 </section>
 
-{% if ov.summary %}
-{% set simulated = ov.summary.provider == 'simulated' %}
-<section class="block summary-block" aria-labelledby="sum-title">
-  <h2 id="sum-title" class="h-small">{{ '盤後摘要（模擬）' if simulated else 'AI 盤後摘要' }}</h2>
-  <p class="summary">{{ ov.summary.content }}</p>
-  <p class="small muted">{% if simulated %}依固定規則從當日數字組成，沒有使用 AI 模型。{% else %}由 AI 依當日資料庫中的數字產生（{{ ov.summary.model }}）。{% endif %}只描述發生了什麼，不構成投資建議。</p>
+{% if key_points %}
+<section class="block" aria-labelledby="kp-title">
+  <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">Highlights</p><h2 id="kp-title">今日 {{ key_points|length }} 大重點</h2></div></div>
+  <ol class="kpoints">
+    {% for p in key_points %}
+    {% set page, anchor = p.link %}
+    <li class="kp glass">
+      <span class="kp-no" aria-hidden="true">{{ '%02d'|format(loop.index) }}</span>
+      <b class="kp-title">{{ p.title }}</b>
+      <p>{{ p.text }}</p>
+      <a class="kp-more" href="{{ m.page_href('radar', anchor) if page == 'radar' else '#' ~ anchor }}">{{ p.link_label }} →</a>
+    </li>
+    {% endfor %}
+  </ol>
+  <p class="small muted">依固定規則從當天資料整理，沒有使用 AI，也不是買賣建議。</p>
 </section>
 {% endif %}
 
 <div class="home-grid">
-  {# ② 今日雷達的總覽：每一類有幾個訊號；點進去是「今日雷達」頁 #}
+  {# ④ 今日雷達的總覽：每一類有幾個訊號；點進去是「今日雷達」頁 #}
   <section class="block" aria-labelledby="brief-title">
     <div class="sec-head">
-      <h2 id="brief-title">今日雷達</h2>
+      <div><p class="eyebrow sm" aria-hidden="true">Radar</p><h2 id="brief-title">今日雷達</h2></div>
       <span class="count">{{ total }} 個訊號</span>
       <a class="more" href="{{ m.page_href('radar') }}">看全部 ›</a>
     </div>
-    <p class="lead beg-only">雷達每天盤後檢查所有上市股票，找出成交量、價格、法人動向和平常不一樣的地方。點一類就能看是哪些股票、為什麼被抓到。</p>
+    <p class="lead beg-only">雷達每天盤後檢查所有股票，找出成交量、價格、法人動向和平常不一樣的地方。點一類就能看是哪些股票、為什麼被抓到。</p>
     {% for sec in radar %}
     <div class="radar-cat">
       <h3 class="cat-title">{{ sec.label }}<span class="muted">・{{ sec.total }}</span></h3>
@@ -81,21 +88,76 @@
     {% endfor %}
   </section>
 
-  <aside class="std-only">
-    <section class="block" aria-labelledby="sector-title">
-      <h2 id="sector-title" class="h-small">類股指數漲跌</h2>
-      {% if sectors.rows %}
-      <ol class="sectors">
-        {% for s in sectors.rows %}
-        {% if s is none %}<li class="gap" aria-hidden="true">⋯</li>{% else %}
-        <li><span>{{ s.name|replace('類指數', '') }}</span>
-          <span class="meter"><i class="{{ s.change_pct|tone }}-bg" style="width: {{ '%.1f'|format(100 * (s.change_pct|float|abs) / sectors.max) }}%"></i></span>
-          <span class="num {{ s.change_pct|tone }}">{{ s.change_pct|pct }}</span></li>
-        {% endif %}
-        {% endfor %}
-      </ol>
-      <p class="small muted">{{ sectors.count }} 個類股指數中漲幅最大與最小各 5 個。</p>
-      {% else %}<p class="empty">沒有類股指數資料</p>{% endif %}
-    </section>
-  </aside>
+  {# ⑤ 類股輪動 #}
+  <section class="block" id="sectors" aria-labelledby="sector-title">
+    <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">Sectors</p><h2 id="sector-title">類股輪動</h2></div></div>
+    {% if sectors.rows %}
+    <ol class="sectors">
+      {% for s in sectors.rows %}
+      {% if s is none %}<li class="gap" aria-hidden="true">⋯</li>{% else %}
+      <li><span>{{ s.name|replace('類指數', '') }}</span>
+        <span class="meter"><i class="{{ s.change_pct|tone }}-bg" style="width: {{ '%.1f'|format(100 * (s.change_pct|float|abs) / sectors.max) }}%"></i></span>
+        <span class="num {{ s.change_pct|tone }}">{{ s.change_pct|pct }}</span></li>
+      {% endif %}
+      {% endfor %}
+    </ol>
+    <p class="small muted">{{ sectors.count }} 個類股指數中漲跌幅最高與最低各 5 個（只是排序，不評價產業好壞）。</p>
+    {% else %}<p class="empty">沒有類股指數資料</p>{% endif %}
+  </section>
 </div>
+
+{% if ov.summary %}
+{% set simulated = ov.summary.provider == 'simulated' %}
+<section class="block summary-block std-only" aria-labelledby="sum-title">
+  <h2 id="sum-title" class="h-small">{{ '盤後摘要（模擬）' if simulated else 'AI 盤後摘要' }}</h2>
+  <p class="summary">{{ ov.summary.content }}</p>
+  <p class="small muted">{% if simulated %}依固定規則從當日數字組成，沒有使用 AI 模型。{% else %}由 AI 依當日資料庫中的數字產生（{{ ov.summary.model }}）。{% endif %}只描述發生了什麼，不構成投資建議。</p>
+</section>
+{% endif %}
+
+{# ⑥ 詳細市場資料（Level 3）：新手模式收起來，需要時再點開；標準、進階模式直接展開 #}
+<details class="more-data glass" id="market-data" data-std-open>
+  <summary><span><span class="eyebrow sm" aria-hidden="true">Details</span><b>詳細市場資料</b></span><span class="muted small">走勢、漲跌停、成交量、上櫃</span></summary>
+  <div class="md-body">
+    {% if b %}
+    <div class="hero-detail">
+      <div class="spark-box">{{ spark|safe }}<span class="small muted">加權指數近 {{ ov.index_history|length }} 個交易日，今天 {{ i.change|signed if i else '–' }} 點</span></div>
+      <dl class="kv">
+        <div><dt>平盤</dt><dd>{{ b.unchanged }}</dd></div>
+        <div><dt>漲停</dt><dd>{{ b.limit_up if b.limit_up is not none else '–' }}</dd></div>
+        <div><dt>跌停</dt><dd>{{ b.limit_down if b.limit_down is not none else '–' }}</dd></div>
+        <div><dt>未成交</dt><dd>{{ b.no_trade if b.no_trade is not none else '–' }}</dd></div>
+        <div><dt>成交量</dt><dd>{{ b.total_volume|lots }} 張</dd></div>
+        <div><dt>成交筆數</dt><dd>{{ '{:,}'.format(b.total_trades) if b.total_trades else '–' }}</dd></div>
+      </dl>
+    </div>
+    {% endif %}
+    {% if o or ob %}
+    {# 上櫃：櫃買中心的資料（上面的數字都是上市） #}
+    <p class="otc-line small"><b>上櫃</b>
+      {% if o %}<span>櫃買指數 {{ o.close|price }} <span class="{{ o.change|tone }}">{{ o.change_pct|pct }}</span></span>{% endif %}
+      {% if ob %}<span>上漲 {{ ob.advancers if ob.advancers is not none else '–' }}・下跌 {{ ob.decliners if ob.decliners is not none else '–' }}</span>
+      <span>成交金額 {{ ob.total_turnover|yi }}</span>{% endif %}
+    </p>
+    {% endif %}
+    {# 進階：資料品質與更新時間 #}
+    <div class="adv-only">
+      <h3 class="h-small">資料品質與更新時間</h3>
+      {% if data_status %}
+      <div class="scroll"><table class="list">
+        <thead><tr><th>來源</th><th>資料</th><th>狀態</th><th class="num">筆數</th><th class="num">完成時間</th></tr></thead>
+        <tbody>
+        {% for r in data_status %}
+          <tr><td>{{ {'TWSE': '證交所', 'TPEX': '櫃買中心'}.get(r.source, r.source) }}</td>
+            <td>{{ {'MI_INDEX': '每日收盤行情', 'T86': '三大法人', 'TWT49U': '除權息', 'COMPANY': '公司資料', 'HOLIDAY': '休市日曆'}.get(r.dataset, r.dataset) }}</td>
+            <td>{{ {'success': '完成', 'no_data': '沒有資料', 'pending': '等待公布', 'failed': '失敗', 'running': '進行中'}.get(r.status, r.status) }}{% if r.warning_count %}<span class="muted small">（{{ r.warning_count }} 則提醒）</span>{% endif %}</td>
+            <td class="num">{{ '{:,}'.format(r.row_count) if r.row_count is not none else '–' }}</td>
+            <td class="num">{{ r.finished_at.strftime('%m/%d %H:%M') if r.finished_at else '–' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}<p class="empty">這天沒有抓取紀錄（例如是從已下載的原始檔重算的）。</p>{% endif %}
+      <p class="small muted">訊號引擎 {{ ENGINE_VERSION }}・計算方式見 <a href="{{ m.page_href('about') }}">資料與計算方式</a>。</p>
+    </div>
+  </div>
+</details>

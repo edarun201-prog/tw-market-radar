@@ -8,7 +8,7 @@ from datetime import date
 
 from psycopg.rows import dict_row
 
-from radar.signals import ENGINE_VERSION, TYPES
+from radar.signals import ENGINE_VERSION, STREAK_DAYS, TYPES
 
 TAIEX = "發行量加權股價指數"
 OTC_INDEX = "櫃買指數"
@@ -77,7 +77,7 @@ def market_overview(conn, d: date) -> dict:
 def signals_on(conn, d: date, signal_type: str | None = None) -> list[dict]:
     return _all(conn, """
         SELECT m.trade_date, m.signal_type, m.value, m.threshold, m.evidence, s.symbol, s.name, i.name AS industry,
-               p.close, p.change, f.ret_1d,
+               p.close, p.change, p.turnover, f.ret_1d, f.ret_5d, f.vol_ratio,
                p.change / NULLIF(p.close - p.change, 0) AS day_pct   -- 官方漲跌幅（除權息日相對參考價）
           FROM market_signals m
           JOIN stocks s ON s.id = m.stock_id
@@ -179,15 +179,51 @@ def industry_peers(conn, stock_id: int, d: date, limit: int = 8) -> list[dict]:
                           ORDER BY p.turnover DESC NULLS LAST LIMIT %(n)s""", {"id": stock_id, "d": d, "n": limit})
 
 
+# 條件搜尋共用的欄位：量比、5 日報酬、是否高於前 60 日最高價、外資是否連續 STREAK_DAYS 個交易日買超
+_SCREEN_FROM = """
+    WITH lastn AS (SELECT trade_date FROM trading_calendar WHERE is_open AND trade_date <= %(d)s
+                    ORDER BY trade_date DESC LIMIT %(streak)s),
+         fb AS (SELECT stock_id FROM institutional_flows WHERE trade_date IN (SELECT trade_date FROM lastn)
+                 GROUP BY stock_id HAVING count(*) = %(streak)s AND min(foreign_net) > 0)
+    SELECT s.symbol, s.name, i.name AS industry, s.security_type, s.market, p.close, p.turnover, f.vol_ratio, f.ret_5d,
+           CASE WHEN p.close IS NOT NULL AND p.change IS NOT NULL AND p.close <> p.change
+                THEN p.change / (p.close - p.change) END AS day_pct,
+           coalesce(p.close > f.high60, false) AS new_high, (fb.stock_id IS NOT NULL) AS foreign_buy
+      FROM daily_prices p JOIN stocks s ON s.id = p.stock_id
+      LEFT JOIN industries i ON i.id = s.industry_id
+      LEFT JOIN daily_features f ON f.stock_id = p.stock_id AND f.trade_date = p.trade_date
+      LEFT JOIN fb ON fb.stock_id = p.stock_id
+     WHERE p.trade_date = %(d)s"""
+
+
 def day_quotes(conn, d: date) -> list[dict]:
-    """某個交易日所有有行情的上市證券（匯出檔的離線搜尋用）；排序和搜尋結果一樣，普通股在前。"""
-    return _all(conn, """SELECT s.symbol, s.name, i.name AS industry, s.security_type, s.market, p.close, p.turnover,
-                                CASE WHEN p.close IS NOT NULL AND p.change IS NOT NULL AND p.close <> p.change
-                                     THEN p.change / (p.close - p.change) END AS day_pct
-                           FROM daily_prices p JOIN stocks s ON s.id = p.stock_id
-                           LEFT JOIN industries i ON i.id = s.industry_id
-                          WHERE p.trade_date = %(d)s
-                          ORDER BY (s.security_type = 'stock') DESC, length(s.symbol), s.symbol""", {"d": d})
+    """某個交易日所有有行情的證券（匯出檔的離線搜尋與條件搜尋用）；排序和搜尋結果一樣，普通股在前。"""
+    return _all(conn, _SCREEN_FROM + " ORDER BY (s.security_type = 'stock') DESC, length(s.symbol), s.symbol",
+                {"d": d, "streak": STREAK_DAYS})
+
+
+# 條件搜尋：名稱、條件（SQL）、排序。只看普通股（和雷達一樣），條件都是當天的原始數字，不做評分。
+SCREENS = {
+    "vol3": ("量比 ≥ 3 倍", "f.vol_ratio >= 3", "f.vol_ratio DESC"),
+    "up5": ("今日漲幅 ≥ 5%", "p.change / NULLIF(p.close - p.change, 0) >= 0.05", "day_pct DESC"),
+    "high60": ("創 60 日新高", "p.close > f.high60", "p.turnover DESC"),
+    "fbuy": (f"外資連買 {STREAK_DAYS} 日以上", "fb.stock_id IS NOT NULL", "p.turnover DESC"),
+}
+
+
+def screen_stocks(conn, d: date, key: str, limit: int = 50) -> tuple[list[dict], int]:
+    """條件搜尋：回傳（前 limit 筆, 符合的總數）。"""
+    _, where, order = SCREENS[key]
+    rows = _all(conn, _SCREEN_FROM + f" AND s.security_type = 'stock' AND {where} ORDER BY {order} NULLS LAST, s.symbol",
+                {"d": d, "streak": STREAK_DAYS})
+    return rows[:limit], len(rows)
+
+
+def data_status(conn, d: date) -> list[dict]:
+    """進階模式的資料品質：這一天各資料集的抓取狀態、筆數、完成時間（ingestion_runs）。"""
+    return _all(conn, """SELECT ds.code AS source, r.dataset, r.status, r.row_count, r.warning_count, r.finished_at
+                           FROM ingestion_runs r JOIN data_sources ds ON ds.id = r.source_id
+                          WHERE r.target_date = %(d)s ORDER BY ds.code, r.dataset""", {"d": d})
 
 
 # ---- 搜尋 ------------------------------------------------------------------------

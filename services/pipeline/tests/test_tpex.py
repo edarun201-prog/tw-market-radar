@@ -115,6 +115,6 @@ def test_otc_on_site_and_live_channels(conn, client, market, settings):  # noqa:
     assert "環球晶" in stock and "上櫃股票" in stock and "上市 2015" not in stock
     assert "上櫃" in client.get("/search", params={"q": "群"}).text or client.get("/search", params={"q": "群"}).status_code == 303
     page = client.get("/market").text
-    assert 'class="otc-line small"' in page and "上漲 <span class=\"up\">452</span>" in page
+    assert 'class="otc-line small"' in page and "上漲 452・下跌" in page        # 家數不上色，只有漲跌幅用紅綠
     assert live.MisProvider.channels(["2330", "6488"], {"2330": "TWSE", "6488": "TPEX"}) == \
         "tse_t00.tw|otc_o00.tw|tse_2330.tw|otc_6488.tw"

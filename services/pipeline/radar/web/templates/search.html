@@ -1,16 +1,40 @@
 {% extends "base.html" %}
 {% set tab = 'search' %}
-{% block title %}{{ '搜尋「' ~ query ~ '」' if query else '搜尋股票' }}｜台股市場雷達{% endblock %}
+{% block title %}{{ '搜尋「' ~ query ~ '」' if query else (screens[screen][0] if screen else '搜尋股票') }}｜台股市場雷達{% endblock %}
 {% block content %}
 <section class="block">
   <p class="eyebrow" aria-hidden="true">Search</p>
   <h1>{{ '搜尋「' ~ query ~ '」' if query else '搜尋股票' }}</h1>
   <form class="page-search" action="/search" role="search">
     <input name="q" type="search" placeholder="代號或名稱，例：2330、台積電" value="{{ query }}" aria-label="搜尋股票"
-           enterkeyhint="search" autocomplete="off"{% if not query %} autofocus{% endif %}>
+           enterkeyhint="search" autocomplete="off"{% if not query and not screen %} autofocus{% endif %}>
     <button type="submit">搜尋</button>
   </form>
-  {% if results %}
+  {# 條件搜尋：最新交易日的原始數字，不做評分 #}
+  <div class="screens" role="group" aria-label="條件搜尋">
+    <span class="lbl">條件搜尋</span>
+    {% for k, sc in screens.items() %}<a class="chip-link" href="{{ '/search' if screen == k else '/search?f=' ~ k }}"{% if screen == k %} aria-pressed="true"{% endif %}>{{ sc[0] }}</a>{% endfor %}
+  </div>
+
+  {% if screen %}
+  <p class="small muted">「{{ screens[screen][0] }}」：{% if day %}{{ day|day }} 收盤，{% endif %}{% if screen_total %}符合 {{ screen_total }} 檔{% if screen_total > screened|length %}，列出前 {{ screened|length }} 檔{% endif %}{% else %}這天沒有符合的股票{% endif %}。條件只是當天的原始數字，不是評分或推薦。</p>
+  {% if screened %}
+  <div class="scroll"><table class="list">
+    <thead><tr><th>股票</th><th>產業</th><th class="num">收盤</th><th class="num">今日</th><th class="num">量比</th><th class="num std-only">5 日</th><th class="num std-only">成交金額</th></tr></thead>
+    <tbody>
+    {% for r in screened %}
+      <tr><td class="sym"><a href="/stock/{{ r.symbol }}"><b>{{ r.symbol }}</b> {{ r.name }}</a></td>
+        <td class="muted">{{ r.industry or '' }}</td>
+        <td class="num">{{ r.close|price }}</td>
+        <td class="num {{ r.day_pct|tone }}">{{ r.day_pct|ret }}</td>
+        <td class="num">{{ '%.1f×'|format(r.vol_ratio|float) if r.vol_ratio is not none else '–' }}</td>
+        <td class="num std-only {{ r.ret_5d|tone }}">{{ r.ret_5d|ret }}</td>
+        <td class="num std-only">{{ r.turnover|yi }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+  {% elif results %}
   <div class="scroll"><table class="list">
     <thead><tr><th>代號</th><th>名稱</th><th>產業</th><th class="std-only">類型</th></tr></thead>
     <tbody>
@@ -23,13 +47,13 @@
     </tbody>
   </table></div>
   {% elif query %}
-  <p class="empty">找不到符合「{{ query }}」的上市證券。可以輸入代號開頭（例：23）或名稱的一部分（例：台積）。</p>
+  <p class="empty">找不到符合「{{ query }}」的股票。可以輸入代號開頭（例：23）或名稱的一部分（例：台積）。</p>
   {% else %}
-  <p class="empty">輸入代號或名稱開始搜尋。</p>
+  <p class="empty">輸入代號或名稱開始搜尋，或點上面的條件。</p>
   {% endif %}
 </section>
 
-{% if not query %}
+{% if not query and not screen %}
 <section class="block" id="recent-box" hidden>
   <h2 class="h-small">最近看過</h2>
   <ul class="recent" id="recent"></ul>

@@ -36,3 +36,38 @@
 {%- endmacro %}
 
 {% macro dot(tone) -%}<span class="dot {{ tone }}" aria-hidden="true"></span>{%- endmacro %}
+
+{# 核心數據：[{label, value, tone}]；只有代表漲跌的數字有顏色 #}
+{% macro metrics(items) -%}
+<dl class="mx">{% for x in items %}<div><dt>{{ x.label }}</dt><dd{% if x.tone %} class="{{ x.tone }}"{% endif %}>{{ x.value }}</dd></div>{% endfor %}</dl>
+{%- endmacro %}
+
+{# 歷史訊號表現：過去出現這種訊號之後 5／20 個交易日的中位數，和同一天全部股票並列；樣本不夠就不顯示數字 #}
+{% macro past(type) -%}
+{%- set p = bt.past.get(type) if bt is defined and bt else none -%}
+{%- if p %}
+<div class="past">
+  <p class="past-title">歷史訊號表現 <span class="muted">過去出現這個訊號之後（中位數）</span></p>
+  {%- if p.enough %}
+  <dl class="past-rows">{% for r in p.rows %}
+    <div><dt>{{ r.label }}</dt><dd><b class="{{ r.tone }}">{{ r.median }}</b><span class="muted">同期全部股票 {{ r.base }}</span></dd></div>{% endfor %}
+  </dl>
+  <p class="small muted">{{ '{:,}'.format(p.n) }} 筆・{{ p.verdict.label }}。只描述過去，不代表之後。<a href="{{ page_href('backtest') }}">看完整回測</a></p>
+  {%- else %}
+  <p class="small muted">歷史樣本不足，暫不顯示統計。</p>
+  {%- endif %}
+</div>
+{%- endif %}
+{%- endmacro %}
+
+{# 訊號卡片（手機版的雷達清單）：股票 → 主要訊號 → 核心數據 → 為什麼被雷達抓到 → 查看個股 #}
+{% macro signal_card(r, i) -%}
+<li class="card">
+  <div class="card-head"><span class="sym">{{ stock_link(r.symbol, r.name) }}</span><span class="muted small">{{ r.industry or '' }}</span></div>
+  <div class="tags"><span class="tag">{{ dot(i.tone) }}{{ i.label }}</span>{% for a in r.also %}<span class="tag ghost">也出現：{{ a }}</span>{% endfor %}</div>
+  {{ metrics(r.metrics) }}
+  <p class="card-why"><span class="muted small">為什麼被雷達抓到？</span>{{ r.sentence }}</p>
+  {%- set href = stock_href(r.symbol) %}{% if href %}
+  <a class="card-more" href="{{ href }}">查看個股 →</a>{% endif %}
+</li>
+{%- endmacro %}

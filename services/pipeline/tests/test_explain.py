@@ -66,3 +66,36 @@ def test_methodology_has_required_sections():
             continue
         for line in lines:
             _no_advice(line)
+
+
+def test_key_points_digest_and_cards_only_describe():
+    from radar.explain import anomaly_digest, key_points, market_state, past_performance, signal_chip, signal_metrics
+    idx, br = {"change_pct": 0.25}, {"advancers": 483, "decliners": 506}
+    rows = [
+        {"signal_type": "vol_spike", "value": 8.9, "symbol": "9933", "name": "中鼎", "industry": "其他", "day_pct": 0.0996,
+         "vol_ratio": 8.9, "ret_5d": 0.1144, "turnover": 9.7e8, "evidence": {"turnover": 9.7e8}},
+        {"signal_type": "vol_spike", "value": 5.3, "symbol": "4722", "name": "國精化", "industry": "化學", "day_pct": 0.0979,
+         "vol_ratio": 5.3, "ret_5d": 0.2169, "turnover": 1.02e9, "evidence": {"turnover": 1.02e9}},
+        {"signal_type": "surge_5d", "value": 0.2169, "symbol": "4722", "name": "國精化", "industry": "化學", "day_pct": 0.0979,
+         "vol_ratio": 5.3, "ret_5d": 0.2169, "turnover": 1.02e9, "evidence": {"ret_5d": 0.2169}},
+    ]
+    sectors = [{"name": "油電燃氣類指數", "change_pct": 5.51}, {"name": "食品類指數", "change_pct": -1.14}]
+    pts = key_points(market_state(idx, br), idx, br, rows, sectors)
+    assert [p["key"] for p in pts] == ["market", "radar", "sectors"]
+    assert "分歧" in pts[0]["title"] and "483" in pts[0]["text"] and "506" in pts[0]["text"]
+    assert "2 檔出現「量能爆增」" in pts[1]["text"] and "9933 中鼎" in pts[1]["text"]          # 最多的一種、最明顯的一檔
+    assert "油電燃氣 +5.51%" in pts[2]["text"] and "食品 -1.14%" in pts[2]["text"]
+    digest = anomaly_digest(rows)
+    assert [d["symbol"] for d in digest] == ["4722", "9933"]                                   # 訊號數優先，再看量比
+    assert digest[0]["metrics"][0] == {"label": "量比", "value": "5.3×", "tone": None}           # 量比不上色，只有漲跌上色
+    assert signal_metrics(rows[0])[:2] == [{"label": "量比", "value": "8.9×", "tone": None},
+                                           {"label": "今日", "value": "+9.96%", "tone": "up"}]
+    assert signal_chip(rows[0])["value"] == "8.9×"
+    for text in [p["text"] for p in pts] + [d["sentence"] for d in digest]:
+        _no_advice(text)
+    # 歷史訊號表現：樣本不夠就不顯示數字
+    few = {"h20": {"n": 5, "median": 0.01, "base_median": 0.0, "diff_win": 0.1, "diff_med": 0.01}}
+    assert past_performance(few) == {"enough": False, "n": 5, "rows": []}
+    s = {"n": 400, "median": 0.023, "base_median": 0.011, "win": 0.6, "base_win": 0.52, "diff_win": 0.08, "diff_med": 0.012}
+    p = past_performance({"h5": s, "h20": s})
+    assert p["enough"] and [r["median"] for r in p["rows"]] == ["+2.3%", "+2.3%"] and p["rows"][0]["base"] == "+1.1%"

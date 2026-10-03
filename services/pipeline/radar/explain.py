@@ -190,6 +190,118 @@ def market_state(index: dict | None, breadth: dict | None) -> dict:
                          f"（上漲 {adv}、下跌 {dec}）。加權指數依市值計算，少數大型股的漲跌影響較大，所以指數和多數個股的方向可能不同。")}
 
 
+# ---- 今日 3 大重點、異常摘要、訊號卡片（固定規則，不用 AI）-----------------------------------------
+CATEGORY_TITLES = {"volume": "量能異常", "price": "價格異常", "flows": "法人動向集中"}
+
+
+def _sector_name(s: dict) -> str:
+    return s["name"].replace("類指數", "")
+
+
+def key_points(state: dict, index: dict | None, breadth: dict | None, rows: list[dict], sectors: list[dict]) -> list[dict]:
+    """首頁「今天值得注意的 3 件事」：市場狀態、最多的一種訊號、類股漲跌最大與最小。只描述資料。
+
+    link 是 (頁面, 錨點)：market＝市場詳細資料、radar＝今日雷達的那一類、sectors＝類股。"""
+    points = []
+    if state["level"] != "unknown":
+        pct, adv, dec = num(index["change_pct"]), breadth["advancers"], breadth["decliners"]
+        tail = {"mixed": f"指數{'上漲' if pct > 0 else '下跌'}，但{'下跌' if pct > 0 else '上漲'}家數比較多，指數和多數個股的方向不同。",
+                "strong": "指數和多數個股同方向上漲。", "weak": "指數和多數個股同方向下跌。",
+                "flat": "指數幾乎沒變，上漲和下跌家數接近。"}[state["level"]]
+        points.append({"key": "market", "title": f"市場{state['label']}", "tone": state["tone"],
+                       "text": f"加權指數 {pct:+.2f}%，上漲 {adv} 家、下跌 {dec} 家。{tail}",
+                       "link": ("market", "market-data"), "link_label": "查看市場資料"})
+    if rows:
+        order = list(SIGNAL_INFO)
+        counts: dict[str, int] = {}
+        for r in rows:
+            counts[r["signal_type"]] = counts.get(r["signal_type"], 0) + 1
+        t = min(counts, key=lambda k: (-counts[k], order.index(k) if k in order else 99))
+        top = max((r for r in rows if r["signal_type"] == t), key=lambda r: abs(num(r["value"]) or 0))
+        i = info(t)
+        points.append({"key": "radar", "title": CATEGORY_TITLES[i.category], "tone": "neutral",
+                       "text": f"今天有 {counts[t]} 檔出現「{i.label}」，是今天最多的一種訊號。"
+                               f"最明顯的是 {top['symbol']} {top['name']}：{evidence_text(top)}。",
+                       "link": ("radar", t), "link_label": "查看雷達"})
+    else:
+        points.append({"key": "radar", "title": "雷達沒有標記", "tone": "neutral",
+                       "text": "今天沒有股票符合雷達的任何一種條件。", "link": ("radar", ""), "link_label": "查看雷達"})
+    if len(sectors) >= 2:
+        hi, lo = sectors[0], sectors[-1]
+        points.append({"key": "sectors", "title": "類股輪動", "tone": "neutral",
+                       "text": f"{_sector_name(hi)} {num(hi['change_pct']):+.2f}%，是今天漲跌幅最高的類股；"
+                               f"{_sector_name(lo)} {num(lo['change_pct']):+.2f}%，是最低的類股。",
+                       "link": ("sectors", "sectors"), "link_label": "查看類股"})
+    return points[:3]
+
+
+def signal_metrics(sig: dict) -> list[dict]:
+    """訊號卡片的核心數據（最多 3 個）：先放這種訊號的關鍵數字，再放今日漲跌與成交金額。
+    tone 只用在代表漲跌的數字（其餘是 None），避免整頁都是紅綠。"""
+    e, t, v = sig.get("evidence") or {}, sig["signal_type"], num(sig["value"])
+    day = num(sig.get("day_pct"))
+    day_m = {"label": "今日", "value": fmt_ret(day), "tone": "up" if (day or 0) > 0 else "down" if (day or 0) < 0 else "flat"}
+    turnover = e.get("turnover") if e.get("turnover") is not None else sig.get("turnover")
+    turn_m = {"label": "成交金額", "value": fmt_yi(turnover), "tone": None}
+    if t == "vol_spike":
+        out = [{"label": "量比", "value": f"{v:.1f}×", "tone": None}, day_m, turn_m]
+    elif t in ("high_60", "low_60"):
+        key, label = ("prev_high60", "前 60 日最高") if t == "high_60" else ("prev_low60", "前 60 日最低")
+        out = [{"label": "收盤", "value": fmt_price(e.get("close")), "tone": None},
+               {"label": label, "value": fmt_price(e.get(key)), "tone": None}, day_m]
+    elif t in ("surge_5d", "plunge_5d"):
+        r5 = num(e.get("ret_5d"))
+        out = [{"label": "5 日", "value": fmt_ret(r5), "tone": "up" if (r5 or 0) > 0 else "down"}, day_m, turn_m]
+    elif t in ("foreign_buy_streak", "foreign_sell_streak"):
+        out = [{"label": "外資連" + ("買" if t == "foreign_buy_streak" else "賣"), "value": f"{e.get('streak_days')} 日", "tone": None},
+               {"label": "累計", "value": f"{float(e.get('cum_foreign_net', 0)) / 1000:+,.0f} 張", "tone": None},
+               {"label": "佔成交量", "value": f"{abs(float(e.get('share') or 0)):.0%}", "tone": None}]
+    elif t == "trust_big_buy":
+        out = [{"label": "投信買超", "value": f"{float(e.get('trust_net', 0)) / 1000:,.0f} 張", "tone": None},
+               {"label": "佔成交量", "value": f"{v:.0%}", "tone": None}, day_m]
+    else:
+        out = [day_m]
+    return [m for m in out if m["value"] != "–"][:3] or [day_m]
+
+
+def signal_chip(sig: dict) -> dict:
+    """個股頁上方「今日為什麼被注意？」的小標籤：訊號名稱＋一個關鍵數字（沒有就只放名稱）。"""
+    e, t, v = sig.get("evidence") or {}, sig["signal_type"], num(sig["value"])
+    value = {"vol_spike": f"{v:.1f}×" if v is not None else "",
+             "surge_5d": fmt_ret(e.get("ret_5d")), "plunge_5d": fmt_ret(e.get("ret_5d")),
+             "foreign_buy_streak": f"{e.get('streak_days')} 日", "foreign_sell_streak": f"{e.get('streak_days')} 日",
+             "trust_big_buy": f"佔量 {v:.0%}" if v is not None else ""}.get(t, "")
+    return {"type": t, "label": info(t).label, "tone": tone_of(t), "value": value}
+
+
+def anomaly_digest(rows: list[dict], limit: int = 3) -> list[dict]:
+    """今日異常摘要：同一檔股票的訊號合併，依「訊號數 → 量比 → 今日漲跌幅（絕對值）」排序。
+    只代表資料和平常差異比較大，不是推薦，也不評價好壞。"""
+    by: dict[str, dict] = {}
+    for r in rows:
+        s = by.setdefault(r["symbol"], {"symbol": r["symbol"], "name": r["name"], "industry": r.get("industry"),
+                                        "day_pct": r.get("day_pct"), "vol_ratio": r.get("vol_ratio"),
+                                        "ret_5d": r.get("ret_5d"), "turnover": r.get("turnover"), "signals": []})
+        s["signals"].append(r)
+    ranked = sorted(by.values(), key=lambda s: (-len(s["signals"]), -(num(s["vol_ratio"]) or 0),
+                                                -abs(num(s["day_pct"]) or 0), s["symbol"]))
+    out = []
+    for s in ranked[:limit]:
+        day, r5, vr = num(s["day_pct"]), num(s["ret_5d"]), num(s["vol_ratio"])
+        metrics = []
+        if vr is not None:
+            metrics.append({"label": "量比", "value": f"{vr:.1f}×", "tone": None})
+        metrics.append({"label": "今日", "value": fmt_ret(day), "tone": "up" if (day or 0) > 0 else "down" if (day or 0) < 0 else "flat"})
+        if r5 is not None:
+            metrics.append({"label": "5 日", "value": fmt_ret(r5), "tone": "up" if r5 > 0 else "down" if r5 < 0 else "flat"})
+        if s["turnover"] is not None:
+            metrics.append({"label": "成交金額", "value": fmt_yi(s["turnover"]), "tone": None})
+        out.append({"symbol": s["symbol"], "name": s["name"], "industry": s["industry"],
+                    "tags": [{"label": info(g["signal_type"]).label, "tone": tone_of(g["signal_type"])} for g in s["signals"]],
+                    "metrics": metrics, "sentence": signal_sentence(s["signals"][0])})
+    return out
+
+
 # ---- 個股：為什麼被雷達注意 ---------------------------------------------------------------
 def _move_phrase(day_ret: float) -> str:
     if abs(day_ret) < 0.01:
@@ -348,6 +460,22 @@ def backtest_verdict(s: dict | None) -> dict:
     return {"key": "same", "label": "之後和全部股票差不多", "tone": "flat"}
 
 
+def past_performance(h: dict) -> dict:
+    """「歷史訊號表現」：出現後 5／20 個交易日的中位數，和同一天全部股票的中位數並列。
+    筆數少於 MIN_SAMPLES 就不顯示數字（只說樣本不足），不自行補數字。"""
+    s20 = h.get("h20")
+    if not s20 or s20["n"] < MIN_SAMPLES or s20["median"] is None:
+        return {"enough": False, "n": s20["n"] if s20 else 0, "rows": []}
+    rows = []
+    for key, label in (("h5", "5 個交易日"), ("h20", "20 個交易日")):
+        s = h.get(key)
+        if s and s["n"] >= MIN_SAMPLES and s["median"] is not None:
+            rows.append({"label": label, "median": _p(s["median"]), "base": _p(s["base_median"]),
+                         "tone": "up" if s["median"] > 0 else "down" if s["median"] < 0 else "flat",
+                         "base_tone": "up" if (s["base_median"] or 0) > 0 else "down" if (s["base_median"] or 0) < 0 else "flat"})
+    return {"enough": True, "n": s20["n"], "rows": rows, "verdict": backtest_verdict(s20)}
+
+
 def _myth(key: str, claim: str, by: dict, base: dict, period: dict, cost: float) -> dict | None:
     if key == "market":
         b20 = base.get("h20")
@@ -419,4 +547,5 @@ def backtest_view(rows: list[dict], period: dict, base: dict, cost: float) -> di
     myths = [m for m in (_myth(k, c, by, base, period, cost) for k, c in MYTHS) if m]
     return {"period": period, "base": base, "types": types, "myths": myths, "cost": cost,
             "caveats": backtest_caveats(period, cost), "horizons": HORIZON_LABELS,
-            "verdicts": {x["info"].type: x["verdict"] for x in types}}
+            "verdicts": {x["info"].type: x["verdict"] for x in types},
+            "past": {x["info"].type: past_performance(x["h"]) for x in types}}
