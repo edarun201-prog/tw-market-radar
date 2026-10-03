@@ -131,7 +131,7 @@
     list.textContent = '';
     list.hidden = !hits.length;
     if (screen) {
-      msg.textContent = '「' + SCREENS[screen].label + '」：' + (hits.length ? '符合 ' + hits.length + ' 檔' + (hits.length > limit ? '，列出前 ' + limit + ' 檔' : '') : '這天沒有符合的股票') + '。條件只是當天的原始數字，不是評分或推薦。';
+      msg.textContent = '「' + SCREENS[screen].label + '」：' + (hits.length ? '符合 ' + hits.length + ' 檔' + (hits.length > limit ? '，列出前 ' + limit + ' 檔' : '') : '這天沒有符合的股票') + '。條件只是當天的原始數字，不是評分或推薦。' + {{ SCREEN_NOTE|tojson }};
     } else if (!q) { msg.textContent = hint; return; }
     else if (!hits.length) { msg.textContent = '找不到符合「' + q + '」的股票。可以輸入代號開頭（例：23）或名稱的一部分（例：台積）。'; return; }
     else msg.textContent = hits.length > LIMIT ? '共 ' + hits.length + ' 筆，先列前 ' + LIMIT + ' 筆；多打幾個字可以縮小範圍。' : '共 ' + hits.length + ' 筆';

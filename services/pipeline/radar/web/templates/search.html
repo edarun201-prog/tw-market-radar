@@ -17,7 +17,7 @@
   </div>
 
   {% if screen %}
-  <p class="small muted">「{{ screens[screen][0] }}」：{% if day %}{{ day|day }} 收盤，{% endif %}{% if screen_total %}符合 {{ screen_total }} 檔{% if screen_total > screened|length %}，列出前 {{ screened|length }} 檔{% endif %}{% else %}這天沒有符合的股票{% endif %}。條件只是當天的原始數字，不是評分或推薦。</p>
+  <p class="small muted">「{{ screens[screen][0] }}」：{% if day %}{{ day|day }} 收盤，{% endif %}{% if screen_total %}符合 {{ screen_total }} 檔{% if screen_total > screened|length %}，列出前 {{ screened|length }} 檔{% endif %}{% else %}這天沒有符合的股票{% endif %}。條件只是當天的原始數字，不是評分或推薦。{{ SCREEN_NOTE }}</p>
   {% if screened %}
   <div class="scroll"><table class="list">
     <thead><tr><th>股票</th><th>產業</th><th class="num">收盤</th><th class="num">今日</th><th class="num">量比</th><th class="num std-only">5 日</th><th class="num std-only">成交金額</th></tr></thead>

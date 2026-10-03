@@ -16,6 +16,9 @@ from radar.web.app import HERE, about_context, backtest_context, home_context, m
 
 MAX_STOCKS = 80
 CHART_DAYS, FLOW_DAYS = 120, 40
+# 匯出檔的 K 線只畫 1M 和 6M（預設 6M，和以前一樣）：每個範圍都是一張完整的 SVG，
+# 網站上的 1M／3M／6M 三張在 80 檔時會讓檔案大很多
+EXPORT_CHART_RANGES = [("1M", 21), ("6M", CHART_DAYS)]
 
 
 SECURITY_TYPES = {"stock": "股票", "etf": "ETF", "other": "其他"}
@@ -50,7 +53,8 @@ def render_day(conn, d: date) -> str:
     for symbol in symbols[:MAX_STOCKS]:
         prof = q.stock_profile(conn, symbol)
         if prof:
-            stocks.append(stock_context(conn, prof, CHART_DAYS, FLOW_DAYS, as_of=d))   # 個股段落停在匯出的那天
+            stocks.append(stock_context(conn, prof, CHART_DAYS, FLOW_DAYS, as_of=d,    # 個股段落停在匯出的那天
+                                        ranges=EXPORT_CHART_RANGES))
     included = {st["s"]["symbol"] for st in stocks}
     return make_templates().env.get_template("export.html").render(
         ctx | about_context(conn) | backtest_context(conn, d) | {

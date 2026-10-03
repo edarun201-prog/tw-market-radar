@@ -99,3 +99,17 @@ def test_key_points_digest_and_cards_only_describe():
     s = {"n": 400, "median": 0.023, "base_median": 0.011, "win": 0.6, "base_win": 0.52, "diff_win": 0.08, "diff_med": 0.012}
     p = past_performance({"h5": s, "h20": s})
     assert p["enough"] and [r["median"] for r in p["rows"]] == ["+2.3%", "+2.3%"] and p["rows"][0]["base"] == "+1.1%"
+
+
+def test_cards_tolerate_missing_evidence():
+    """evidence 缺欄位或是 null：卡片拿掉那一格，不出錯、不顯示 None。"""
+    from radar.explain import signal_chip, signal_metrics
+    streak = {"signal_type": "foreign_buy_streak", "value": None, "day_pct": None,
+              "evidence": {"streak_days": None, "cum_foreign_net": None, "share": None}}
+    assert signal_metrics(streak) == [{"label": "今日", "value": "–", "tone": "flat"}]
+    assert signal_chip(streak)["value"] == ""
+    trust = {"signal_type": "trust_big_buy", "value": None, "day_pct": 0.01, "evidence": {"trust_net": None}}
+    assert [m["label"] for m in signal_metrics(trust)] == ["今日"]
+    ok = {"signal_type": "foreign_buy_streak", "value": 5, "day_pct": 0.01,
+          "evidence": {"streak_days": 5, "cum_foreign_net": 12_345_000, "share": -0.123}}
+    assert [m["value"] for m in signal_metrics(ok)] == ["5 日", "+12,345 張", "12%"]

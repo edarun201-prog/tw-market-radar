@@ -235,6 +235,12 @@ def key_points(state: dict, index: dict | None, breadth: dict | None, rows: list
     return points[:3]
 
 
+def _fmt(v, spec: str, suffix: str = "", scale: float = 1) -> str:
+    """卡片上的數字；evidence 缺欄位或是 null 時回傳「–」（卡片會拿掉這一格），不會出錯也不會顯示 None。"""
+    n = num(v)
+    return "–" if n is None else f"{n / scale:{spec}}{suffix}"
+
+
 def signal_metrics(sig: dict) -> list[dict]:
     """訊號卡片的核心數據（最多 3 個）：先放這種訊號的關鍵數字，再放今日漲跌與成交金額。
     tone 只用在代表漲跌的數字（其餘是 None），避免整頁都是紅綠。"""
@@ -244,7 +250,7 @@ def signal_metrics(sig: dict) -> list[dict]:
     turnover = e.get("turnover") if e.get("turnover") is not None else sig.get("turnover")
     turn_m = {"label": "成交金額", "value": fmt_yi(turnover), "tone": None}
     if t == "vol_spike":
-        out = [{"label": "量比", "value": f"{v:.1f}×", "tone": None}, day_m, turn_m]
+        out = [{"label": "量比", "value": _fmt(v, ".1f", "×"), "tone": None}, day_m, turn_m]
     elif t in ("high_60", "low_60"):
         key, label = ("prev_high60", "前 60 日最高") if t == "high_60" else ("prev_low60", "前 60 日最低")
         out = [{"label": "收盤", "value": fmt_price(e.get("close")), "tone": None},
@@ -253,12 +259,13 @@ def signal_metrics(sig: dict) -> list[dict]:
         r5 = num(e.get("ret_5d"))
         out = [{"label": "5 日", "value": fmt_ret(r5), "tone": "up" if (r5 or 0) > 0 else "down"}, day_m, turn_m]
     elif t in ("foreign_buy_streak", "foreign_sell_streak"):
-        out = [{"label": "外資連" + ("買" if t == "foreign_buy_streak" else "賣"), "value": f"{e.get('streak_days')} 日", "tone": None},
-               {"label": "累計", "value": f"{float(e.get('cum_foreign_net', 0)) / 1000:+,.0f} 張", "tone": None},
-               {"label": "佔成交量", "value": f"{abs(float(e.get('share') or 0)):.0%}", "tone": None}]
+        share = num(e.get("share"))
+        out = [{"label": "外資連" + ("買" if t == "foreign_buy_streak" else "賣"), "value": _fmt(e.get("streak_days"), ".0f", " 日"), "tone": None},
+               {"label": "累計", "value": _fmt(e.get("cum_foreign_net"), "+,.0f", " 張", 1000), "tone": None},
+               {"label": "佔成交量", "value": _fmt(None if share is None else abs(share), ".0%"), "tone": None}]
     elif t == "trust_big_buy":
-        out = [{"label": "投信買超", "value": f"{float(e.get('trust_net', 0)) / 1000:,.0f} 張", "tone": None},
-               {"label": "佔成交量", "value": f"{v:.0%}", "tone": None}, day_m]
+        out = [{"label": "投信買超", "value": _fmt(e.get("trust_net"), ",.0f", " 張", 1000), "tone": None},
+               {"label": "佔成交量", "value": _fmt(v, ".0%"), "tone": None}, day_m]
     else:
         out = [day_m]
     return [m for m in out if m["value"] != "–"][:3] or [day_m]
@@ -267,11 +274,12 @@ def signal_metrics(sig: dict) -> list[dict]:
 def signal_chip(sig: dict) -> dict:
     """個股頁上方「今日為什麼被注意？」的小標籤：訊號名稱＋一個關鍵數字（沒有就只放名稱）。"""
     e, t, v = sig.get("evidence") or {}, sig["signal_type"], num(sig["value"])
-    value = {"vol_spike": f"{v:.1f}×" if v is not None else "",
+    value = {"vol_spike": _fmt(v, ".1f", "×"),
              "surge_5d": fmt_ret(e.get("ret_5d")), "plunge_5d": fmt_ret(e.get("ret_5d")),
-             "foreign_buy_streak": f"{e.get('streak_days')} 日", "foreign_sell_streak": f"{e.get('streak_days')} 日",
-             "trust_big_buy": f"佔量 {v:.0%}" if v is not None else ""}.get(t, "")
-    return {"type": t, "label": info(t).label, "tone": tone_of(t), "value": value}
+             "foreign_buy_streak": _fmt(e.get("streak_days"), ".0f", " 日"),
+             "foreign_sell_streak": _fmt(e.get("streak_days"), ".0f", " 日"),
+             "trust_big_buy": "–" if v is None else f"佔量 {v:.0%}"}.get(t, "")
+    return {"type": t, "label": info(t).label, "tone": tone_of(t), "value": "" if value == "–" else value}
 
 
 def anomaly_digest(rows: list[dict], limit: int = 3) -> list[dict]:

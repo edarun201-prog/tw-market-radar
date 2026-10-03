@@ -105,9 +105,10 @@ def home_context(conn, day: date, requested: date | None = None) -> dict:
     }
 
 
-def price_charts(prices: list[dict], sigs: list[dict], acts: list[dict]) -> list[dict]:
+def price_charts(prices: list[dict], sigs: list[dict], acts: list[dict],
+                 ranges: list[tuple[str, int]] = CHART_RANGES) -> list[dict]:
     """K 線的各個時間範圍（1M／3M／6M／1Y）；預設 3M，資料不夠時改成最長的那個。"""
-    avail = [(label, n) for label, n in CHART_RANGES if len(prices) >= n]
+    avail = [(label, n) for label, n in ranges if len(prices) >= n]
     if not avail and prices:
         avail = [(f"{len(prices)} 日", len(prices))]
     default = "3M" if any(label == "3M" for label, _ in avail) else (avail[-1][0] if avail else None)
@@ -115,8 +116,10 @@ def price_charts(prices: list[dict], sigs: list[dict], acts: list[dict]) -> list
              "svg": charts.price_chart(prices[-n:], sigs, acts, TYPES)} for label, n in avail]
 
 
-def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of: date | None = None) -> dict:
-    """個股頁的資料。as_of：只用這天（含）以前的資料（匯出過去的日子）；不指定就是最新。"""
+def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of: date | None = None,
+                  ranges: list[tuple[str, int]] = CHART_RANGES) -> dict:
+    """個股頁的資料。as_of：只用這天（含）以前的資料（匯出過去的日子）；不指定就是最新。
+    ranges：K 線要畫哪些時間範圍（匯出檔只畫兩個，檔案比較小）。"""
     prices = q.stock_prices(conn, prof["id"], days, as_of)
     sigs = q.stock_signals(conn, prof["id"], as_of)
     acts = q.stock_actions(conn, prof["id"], as_of)
@@ -129,7 +132,7 @@ def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of:
         "s": prof, "last": last, "signals": sigs, "actions": acts, "flow_days": flow_days,
         "story": explain.stock_story(last, today, recent),
         "chips": [explain.signal_chip(x) for x in today][:3],
-        "kcharts": price_charts(prices, sigs, acts),
+        "kcharts": price_charts(prices, sigs, acts, ranges),
         "flows_svg": charts.flows_chart(q.stock_flows(conn, prof["id"], flow_days, as_of)),
         "peers": q.industry_peers(conn, prof["id"], last["trade_date"]) if last and prof["industry"] else [],
         "range": (prices[0]["trade_date"], prices[-1]["trade_date"]) if prices else None,
@@ -190,7 +193,8 @@ def make_templates() -> Jinja2Templates:
     templates.env.globals.update(
         describe=explain.evidence_text, sentence=explain.signal_sentence, tone_of=explain.tone_of,
         info=explain.info, SIGNAL_INFO=explain.SIGNAL_INFO, TYPES=TYPES, ENGINE_VERSION=ENGINE_VERSION,
-        export=False, stock_href=lambda symbol: f"/stock/{symbol}", asset_v=asset_version())
+        export=False, stock_href=lambda symbol: f"/stock/{symbol}", asset_v=asset_version(),
+        SCREEN_NOTE=q.SCREEN_NOTE)
     return templates
 
 
@@ -213,6 +217,18 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
 
     def page(request: Request, name: str, ctx: dict, status: int = 200):
         return templates.TemplateResponse(request, name, ctx, status_code=status)
+
+    # 回測要彙總全部訊號的結果，一天只會變一次（每日流程算完之後）。同一版資料只算一次，
+    # 個股頁、雷達頁、回測頁共用，不必每次開頁面都重算。
+    bt_cache: dict = {}
+
+    def cached_backtest(conn, as_of: date | None = None) -> dict:
+        key = (as_of, q.backtest_version(conn))
+        if key not in bt_cache:
+            if len(bt_cache) >= 32:
+                bt_cache.clear()
+            bt_cache[key] = backtest_context(conn, as_of)
+        return bt_cache[key]
 
     @app.exception_handler(HTTPException)
     async def not_found(request: Request, exc: HTTPException):
@@ -241,18 +257,18 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
         day = q.resolve_date(conn, d)
         if day is None:
             return page(request, "error.html", {"status": 503, "detail": "資料庫裡還沒有行情資料。"}, 503)
-        return page(request, "radar.html", home_context(conn, day, d) | backtest_context(conn, day))
+        return page(request, "radar.html", home_context(conn, day, d) | cached_backtest(conn, day))
 
     @app.get("/backtest", response_class=HTMLResponse)
     def backtest(request: Request, conn=Depends(db)):
-        return page(request, "backtest.html", backtest_context(conn))
+        return page(request, "backtest.html", cached_backtest(conn))
 
     @app.get("/stock/{symbol}", response_class=HTMLResponse)
     def stock(request: Request, symbol: str, conn=Depends(db)):
         prof = q.stock_profile(conn, symbol.upper())
         if prof is None:
             raise HTTPException(404, f"找不到證券代號 {symbol}")
-        return page(request, "stock.html", stock_context(conn, prof) | backtest_context(conn))
+        return page(request, "stock.html", stock_context(conn, prof) | cached_backtest(conn))
 
     @app.get("/about", response_class=HTMLResponse)
     def about(request: Request, conn=Depends(db)):
@@ -318,7 +334,7 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
     def api_backtest(conn=Depends(db)):
         """訊號回測：每種訊號出現後 5／20／60 個交易日（與隔天才買的 20 日）的上漲比例、中位數、四分位數，
         和同一天全部普通股的對照；另附市面說法對照與限制說明。只描述過去，不代表之後。"""
-        return backtest_json(backtest_context(conn)["bt"])
+        return backtest_json(cached_backtest(conn)["bt"])
 
     @app.get("/api/signal-types")
     def api_signal_types():

@@ -56,8 +56,7 @@ def publish_pages(src: Path, work_dir: Path, repo_url: str, *, label: str | None
 
     _git(work_dir, "init", "-q", "-b", BRANCH)
     _git(work_dir, "add", "-A")
-    message = (f"台股雷達 {label} 盤後" if label else "台股雷達 盤後快照") + \
-        "\n\n由每日流程自動發布（只保留最新一份）。\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+    message = (f"台股雷達 {label} 盤後" if label else "台股雷達 盤後快照") + "\n\n由每日流程自動發布（只保留最新一份）。\n"
     _git(work_dir, "commit", "-q", "-m", message)
     _git(work_dir, "push", "-q", "--force", repo_url, f"{BRANCH}:{BRANCH}")
     stamp.write_text(digest, encoding="utf-8")

@@ -8,7 +8,7 @@ from datetime import date
 
 from psycopg.rows import dict_row
 
-from radar.signals import ENGINE_VERSION, STREAK_DAYS, TYPES
+from radar.signals import ENGINE_VERSION, MIN_TURNOVER, STREAK_DAYS, TYPES
 
 TAIEX = "發行量加權股價指數"
 OTC_INDEX = "櫃買指數"
@@ -209,6 +209,9 @@ SCREENS = {
     "high60": ("創 60 日新高", "p.close > f.high60", "p.turnover DESC"),
     "fbuy": (f"外資連買 {STREAK_DAYS} 日以上", "fb.stock_id IS NOT NULL", "p.turnover DESC"),
 }
+# 條件搜尋比雷達寬鬆（沒有成交金額門檻、量比 3 倍而不是 4 倍、外資連買不看佔成交量），檔數會和雷達不同，頁面上要講清楚
+SCREEN_NOTE = (f"條件搜尋比雷達寬鬆：沒有成交金額 {MIN_TURNOVER // 100_000_000} 億元的門檻，外資連買也不看佔成交量，"
+               "所以檔數通常比今日雷達多。")
 
 
 def screen_stocks(conn, d: date, key: str, limit: int = 50) -> tuple[list[dict], int]:
@@ -251,6 +254,13 @@ _OUTCOME_ROWS = """
       LEFT JOIN market_forward_returns mf ON mf.trade_date = m.trade_date AND mf.horizon = x.h
      WHERE m.engine_version = %(v)s AND x.v IS NOT NULL AND (%(as_of)s::date IS NULL OR x.e <= %(as_of)s)
 """
+
+
+def backtest_version(conn) -> tuple:
+    """回測資料的版本：最新交易日、訊號結果的筆數與最後計算時間。每日流程更新後就會變，網站用它判斷快取還能不能用。"""
+    return conn.execute("""SELECT (SELECT max(trade_date) FROM daily_prices),
+                                  (SELECT count(*) FROM signal_outcomes), (SELECT max(computed_at) FROM signal_outcomes),
+                                  (SELECT count(*) FROM market_forward_returns)""").fetchone()
 
 
 def backtest_stats(conn, cost: float, as_of: date | None = None) -> list[dict]:
