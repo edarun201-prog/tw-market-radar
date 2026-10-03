@@ -9,6 +9,7 @@ flowchart LR
   E --> W[網站<br/>新手／標準／進階]
   E --> A[JSON API<br/>signal object]
   E --> X[單一 HTML 檔]
+  X --> G[公開網頁<br/>GitHub Pages gh-pages]
   S --> AI[AI 盤後摘要<br/>只看 facts]
   W --> P[App 模式（PWA）<br/>離線快取・主畫面圖示]
 ```
@@ -79,6 +80,16 @@ flowchart LR
   使用者再多，上游請求數也不變。上游失敗時回上一次的資料並標示 `stale`。
 - **只在有新資訊時出現**：頁面帶著它的盤後日期（`data-day`），即時報價的日期比它新才顯示；晚上盤後資料進來後自動收起。
 - **人多時的下一步**：目前是每 15 秒輪詢（經過快取，很便宜）；使用者很多時可改成 Server-Sent Events 由伺服器推送，`LiveFeed` 不用改。
+
+## 公開網頁（radar/jobs/pages.py）
+
+公開的版本就是「單一 HTML 檔」：沒有伺服器、沒有資料庫連線、沒有盤中即時行情，所以不會暴露本機的任何東西。
+
+- 每日流程匯出完，如果 `.env` 有 `PAGES_REPO`，就把最新交易日的檔案當成 `index.html`（加 `.nojekyll`），
+  在 `data/pages` 建一個只有一個 commit 的 `gh-pages` 分支並強制推送。網址固定，內容每天換。
+- 用 sha256 記住上次發布的內容（`data/pages.published`），一樣就不推；匯出檔不存在或小於 100 KB 就不發布。
+- 失敗只記 log（`_safe`），不影響行情與其他步驟；前一天的網頁維持原樣。
+- 要換成別的靜態主機（Cloudflare Pages、Netlify 等），只要換掉推送的那一步，匯出檔不用改。
 
 ## 之後的階段（只保留結構，目前不做）
 

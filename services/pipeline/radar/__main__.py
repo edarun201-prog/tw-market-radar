@@ -10,6 +10,7 @@
   ex-rights  除權息（TWT49U），以月為單位回補
   companies  上市公司基本資料與產業別
   analyze    計算特徵（還原價）與異常訊號，印出每天訊號數
+  pages      公開網頁：把最新的 HTML 檔推到 GitHub Pages（.env 設定 PAGES_REPO 才會做；每日流程也會做）
   tpex       上櫃（櫃買中心 OpenAPI）：抓最新一天的行情、三大法人、除權息（每日流程也會做）
   outcomes   訊號回測：重算每一筆訊號之後的報酬（analyze 也會順便做）
   summary    盤後摘要（有 Claude API 金鑰用 AI，沒有就用模擬摘要）
@@ -180,6 +181,15 @@ def cmd_analyze(args, settings) -> None:
             print(f"{TYPES.get(typ, typ):<12}{med:>6.0f}{p90:>6.0f}{mx:>6}{tot:>7}")
 
 
+def cmd_pages(args, settings) -> None:
+    from radar.jobs.scheduler import export_latest, publish_latest_pages
+    if not settings.pages_repo:
+        print("沒有設定 PAGES_REPO（.env），不發布。")
+        return
+    export_latest(settings)
+    publish_latest_pages(settings, force=args.force)
+
+
 def cmd_tpex(args, settings) -> None:
     from radar.jobs.scheduler import update_tpex
     update_tpex(settings)
@@ -318,6 +328,10 @@ def main() -> None:
     p.add_argument("--end", type=_date)
     p.add_argument("--report-only", action="store_true", help="只印報表，不重算")
     p.set_defaults(fn=cmd_analyze)
+
+    p = sub.add_parser("pages", help="公開網頁：把最新的單一 HTML 檔發布到 GitHub Pages（gh-pages 分支）")
+    p.add_argument("--force", action="store_true", help="內容沒變也重新推送")
+    p.set_defaults(fn=cmd_pages)
 
     p = sub.add_parser("tpex", help="上櫃（櫃買中心 OpenAPI）：抓它目前提供的最新一天")
     p.set_defaults(fn=cmd_tpex)

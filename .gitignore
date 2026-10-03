@@ -6,6 +6,8 @@ data/raw/*
 !data/raw/.gitkeep
 data/logs/
 data/exports/
+data/pages/
+data/pages.published
 *.log
 *.tmp
 

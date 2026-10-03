@@ -13,12 +13,12 @@
 | 4 | 除權息／產業別／休市日曆爬蟲、還原價特徵、訊號引擎 v2、一致性稽核 | 完成；見 `docs/crawler-tasks.md`、`docs/signals.md` |
 | 5–7 | JSON API、首頁、股票頁、搜尋、資料與計算方式 | 完成；`python -m radar web`。新手／標準模式、名詞說明、「為什麼被雷達注意」，見 `docs/architecture.md` |
 | 8 | 盤後摘要 | 完成；有 Claude API 金鑰用 AI，沒有就用模擬摘要（依規則組句，網站標示「模擬」） |
-| 9 | 發布 | 本機每日排程已註冊；分享用單一 HTML 檔（`export`）。公開上線前需先確認證交所資訊使用規範 |
+| 9 | 發布 | 本機每日排程已註冊；分享用單一 HTML 檔（`export`）；公開網頁每天自動發布到 GitHub Pages（只放盤後快照）。公開上線前需先確認證交所資訊使用規範 |
 | 10 | 多頁式、響應式、App 模式 | 完成；入口頁（影片背景）＋今日市場／今日雷達／訊號回測／搜尋／個股／說明各一頁（網站與 HTML 檔相同），桌面與手機同一份功能，可安裝（PWA）。見下方「App 模式」 |
 | 12 | 上櫃股票 | 進行中；櫃買中心 OpenAPI 每天抓最新一天（行情、三大法人、除權息、櫃買指數、漲跌家數、公司產業別），搜尋、個股頁、今日市場、盤中即時都包含上櫃。OpenAPI 沒有歷史，上櫃的訊號要累積 20～60 個交易日才會陸續出現 |
 | 11 | 訊號回測（Phase 3） | 完成；每筆訊號之後 5／20／60 日的還原報酬，和同一天全部股票比較；新手／標準／進階三種深度，進階有「市面說法 vs 資料」與限制說明。見 `docs/signals.md` |
 
-範圍：上市（TWSE）＋上櫃（TPEX，2026-10-02 起每天收集）。測試 96 項（`pytest -q`）。
+範圍：上市（TWSE）＋上櫃（TPEX，2026-10-02 起每天收集）。測試 98 項（`pytest -q`）。
 
 **架構調整**：原規劃網站用 Next.js。開發機是 4 GB 記憶體的筆電，Next.js 建置要 1 GB 以上且每次改動都要重建，
 所以改成 Python（FastAPI）直接產生 HTML，圖表在伺服器端畫成 SVG，沒有前端建置、開著時約占 85 MB（實測），
@@ -35,6 +35,7 @@ flowchart LR
   DB --> F[還原價特徵] --> S[訊號引擎] --> W[網站／API]
   S --> AI[盤後摘要<br/>只看 facts] --> W
   W --> X[單一 HTML 檔<br/>data/exports]
+  X --> P[公開網頁<br/>GitHub Pages]
 ```
 
 | 資料集 | 來源 | 頻率 | 寫入 |
@@ -48,7 +49,7 @@ flowchart LR
 所有寫入都是 upsert，重跑不會重複；每次抓取都記錄在 `ingestion_runs`。原始回應都先存檔，改了解析規則可以從檔案重算。
 
 每日流程（`python -m radar daily`）：補抓漏掉的日子 → 更新除權息／公司資料／休市日曆 → 抓當天行情（休市日曆上的日子只確認一次，
-其他日子未齊則每 20 分鐘重試到 21:30）→ 計算特徵與訊號 → 盤後摘要（有金鑰用 AI，否則模擬）→ 匯出 HTML 檔。任何一步失敗只記錄，不影響其他步驟。
+其他日子未齊則每 20 分鐘重試到 21:30）→ 計算特徵與訊號 → 盤後摘要（有金鑰用 AI，否則模擬）→ 匯出 HTML 檔 → 發布公開網頁（有設定 `PAGES_REPO` 才做）。任何一步失敗只記錄，不影響其他步驟。
 
 ## 快速開始
 
@@ -114,6 +115,18 @@ docker compose up -d worker                                # 常駐排程，每�
 檔案約 2 MB，包含當日總覽與所有有訊號的個股（K 線近 120 個交易日），樣式內嵌、不需要網路或伺服器，雙擊就能開，可以直接用 LINE 或 Email 傳。
 手動匯出某一天：`python -m radar export --date 2026-07-29`（只產生那一天的檔案，不會動到「最新」）。訊號多的日子最多收錄 80 檔個股段落，其餘只列在總覽。
 
+### 公開網頁：GitHub Pages
+
+`.env` 設定 `PAGES_REPO=https://github.com/<帳號>/tw-market-radar.git` 後，每日流程匯出完會把最新交易日的 HTML 檔
+當成首頁 `index.html`，強制推到同一個儲存庫的 `gh-pages` 分支（`radar/jobs/pages.py`）：
+
+- `gh-pages` 每次只留一個 commit，儲存庫不會因為每天的資料越來越大；`main` 的程式碼不受影響。
+- 內容和上次一樣就不推；匯出檔不存在或太小（小於 100 KB）就不發布，前一天的網頁維持原樣。
+- 推送用這台電腦已登入的 git 憑證；工作資料夾是 `data\pages`（不進 git）。
+- GitHub 儲存庫的 **Settings → Pages → Build and deployment** 要選 **Deploy from a branch**、分支 **gh-pages**、資料夾 **/ (root)**。
+- 手動發布：`python -m radar pages`（`--force` 內容沒變也重推）。
+- 公開的是盤後快照，沒有伺服器，不含盤中即時行情。
+
 ### App 模式
 
 網站可以像 App 一樣使用：主畫面圖示、獨立視窗（沒有網址列）、手機底部分頁列（市場／雷達／搜尋／說明），
@@ -155,6 +168,7 @@ docker compose up -d worker                                # 常駐排程，每�
 | `tpex` | 上櫃：抓櫃買中心 OpenAPI 目前提供的最新一天（每日流程也會做） |
 | `summary [--date D] [--all] [--simulate] [--force] [--show-facts]` | 盤後摘要；沒有金鑰或加 `--simulate` 用模擬摘要，`--all` 補齊所有交易日 |
 | `export [--date D] [--out DIR]` | 把某一天存成一個離線 HTML 檔（預設 `data/exports`） |
+| `pages [--force]` | 匯出最新一天並發布到 GitHub Pages 的 `gh-pages` 分支（`.env` 要設定 `PAGES_REPO`；每日流程也會做） |
 | `ingest --date D` | 抓指定日期並入庫 |
 | `prefetch [--start D] [--end D]` | 只下載原始檔到 `data/raw`，不需資料庫 |
 | `backfill [--start D] [--end D] [--force] [--from-raw]` | 回補；`--from-raw` 用已下載的原始檔 |
@@ -184,6 +198,7 @@ cd services\pipeline
 | `test_explain.py` | 說明層：規則文字由門檻常數產生、白話說明不含建議用語、市場狀況判斷 |
 | `test_tpex.py` | 上櫃：正規化、OpenAPI 只有最新一天、不把沒資料的日子記成休市、和上市分開驗證筆數、網站與盤中即時 |
 | `test_live.py` | 盤中即時：解析證交所回應、開盤時段、代號檢查、快取共用、上游失敗時的處理、可替換的資料來源、匯出檔不含即時 |
+| `test_pages.py` | 公開網頁：`gh-pages` 只留一個 commit、首頁就是匯出檔、內容沒變不推、壞掉的匯出檔不發布（用本機空儲存庫當遠端） |
 | `test_backtest.py` | 回測：後續報酬連乘、隔天才買、同一天全部股票的基準、快照只用當時已知的結果、文字只描述過去 |
 
 ## 資料夾
@@ -216,6 +231,7 @@ tw-market-radar/
 ├── data/
 │   ├── raw/                 # 原始回應（不進 git）
 │   ├── exports/             # 匯出的 HTML 檔（不進 git）
+│   ├── pages/               # 發布到 gh-pages 的工作資料夾（不進 git）
 │   └── logs/daily.log       # 每日排程紀錄
 └── docker-compose.yml
 ```

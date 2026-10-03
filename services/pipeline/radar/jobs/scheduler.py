@@ -162,6 +162,19 @@ def export_latest(settings: Settings) -> None:
             log.info("已匯出 %s", path)
 
 
+def publish_latest_pages(settings: Settings, force: bool = False) -> None:
+    """公開網頁：.env 有 PAGES_REPO 才發布最新的單一 HTML 檔到 gh-pages（內容沒變就不推）。"""
+    if not settings.pages_repo:
+        return
+    from radar.jobs.pages import publish_pages
+    with repo.connect(settings.web_database_url) as conn:
+        d = conn.execute("SELECT max(trade_date) FROM market_breadth").fetchone()[0]
+    if d is None:
+        return
+    publish_pages(settings.export_dir / f"台股雷達_{d:%Y-%m-%d}.html", settings.export_dir.parent / "pages",
+                  settings.pages_repo, label=d.isoformat(), force=force)
+
+
 def _safe(step, settings: Settings, label: str) -> None:
     """輔助資料或後續計算失敗只記 log，不影響行情；下一次排程會再試。"""
     try:
@@ -178,6 +191,7 @@ def daily_job(settings: Settings) -> None:
     _safe(update_analytics, settings, "計算特徵與訊號")
     _safe(update_summary, settings, "盤後摘要")
     _safe(export_latest, settings, "匯出 HTML 檔")
+    _safe(publish_latest_pages, settings, "發布公開網頁")
 
 
 def wait_for_database(settings: Settings, timeout_sec: float = 180, every_sec: float = 10) -> None:
@@ -214,6 +228,7 @@ def run_daily(settings: Settings) -> None:
     _safe(update_analytics, settings, "計算特徵與訊號")
     _safe(update_summary, settings, "盤後摘要")
     _safe(export_latest, settings, "匯出 HTML 檔")
+    _safe(publish_latest_pages, settings, "發布公開網頁")
     log.info("每日流程結束")
 
 

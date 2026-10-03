@@ -50,6 +50,7 @@ class Settings:
     web_database_url: str        # 網站用唯讀帳號；沒設定時用 database_url
     export_dir: Path             # 匯出的 HTML 檔
     live_provider: str = "mis"   # 盤中即時行情的資料來源：mis（證交所基本市況報導，只給自己看）、off（關閉）
+    pages_repo: str = ""         # 公開網頁（GitHub Pages）要推到哪個儲存庫；空的就不發布
 
 
 def load_settings() -> Settings:
@@ -73,4 +74,5 @@ def load_settings() -> Settings:
         web_database_url=env("WEB_DATABASE_URL") or env("DATABASE_URL", "postgresql://radar:radar@localhost:5432/radar"),
         export_dir=Path(env("EXPORT_DIR", str(REPO_ROOT / "data" / "exports" if REPO_ROOT else "data/exports"))),
         live_provider=env("LIVE_PROVIDER", "mis"),
+        pages_repo=env("PAGES_REPO", ""),
     )
