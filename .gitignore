@@ -9,6 +9,7 @@ data/exports/
 data/pages/
 data/pages.published
 data/public_api/
+data/strategy/
 *.log
 *.tmp
 

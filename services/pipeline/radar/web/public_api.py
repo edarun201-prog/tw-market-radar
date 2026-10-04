@@ -139,8 +139,14 @@ def build_public_api(conn, d: date, out_dir: Path) -> dict:
         "generated_at": datetime.now(TAIPEI).isoformat(timespec="seconds"), "engine_version": ENGINE_VERSION,
         "sources": ["臺灣證券交易所（盤後報表、OpenAPI）", "證券櫃檯買賣中心（OpenAPI）"],
         "disclaimer": DISCLAIMER,
-        "endpoints": {"market": "market.json", "stock": "stocks/{symbol}.json"},
+        "endpoints": {"market": "market.json", "stock": "stocks/{symbol}.json", "strategy": "strategy.json"},
         "fields": FIELDS,
         "stocks": [[s["symbol"], s["name"], s["market"], s["industry"], s["security_type"]] for s in stocks],
     })
-    return {"files": files + 2, "bytes": size, "root": str(root)}
+    # 自訂條件回測：和網站、公開網頁同一份結果
+    from radar import strategy
+    from radar.web.app import lab_version
+    lab_text = strategy.load_or_build(conn, d, out_dir.parent / "strategy", lab_version(conn))
+    (root / "strategy.json").write_text(lab_text, encoding="utf-8")
+    size += len(lab_text.encode("utf-8"))
+    return {"files": files + 3, "bytes": size, "root": str(root)}

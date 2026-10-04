@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from radar import explain, indicators, live
+from radar import explain, indicators, live, strategy
 from radar.config import TAIPEI, load_settings
 from radar.formatting import (fmt_day, fmt_lots, fmt_pct, fmt_price, fmt_ret, fmt_signed, fmt_yi, tone)
 from radar.outcomes import ROUND_TRIP_COST
@@ -167,6 +167,20 @@ def backtest_json(bt: dict) -> dict:
     }
 
 
+def lab_version(conn) -> str:
+    """自訂條件回測的資料版本（和訊號回測同一個判斷）：每日流程更新後就會變，快取檔重算。"""
+    return hashlib.sha1(repr(q.backtest_version(conn)).encode()).hexdigest()[:10]
+
+
+def lab_context(lab_text: str) -> dict:
+    """自訂條件回測：頁面要的面向、選項、常見組合，和完整結果（JSON，交給瀏覽器查）。"""
+    import json
+    lab = json.loads(lab_text)
+    return {"lab": {"dims": lab["dims"], "presets": strategy.presets(lab), "period": lab["period"],
+                    "max_picks": lab["max_picks"], "date": lab["date"]},
+            "lab_json": lab_text}
+
+
 def about_context(conn) -> dict:
     return {"signal_infos": list(explain.SIGNAL_INFO.values()), "methodology": explain.METHODOLOGY,
             "latest": q.latest_trade_date(conn)}
@@ -231,6 +245,13 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
     # 個股頁、雷達頁、回測頁共用，不必每次開頁面都重算。
     bt_cache: dict = {}
 
+    lab_dir = settings.export_dir.parent / "strategy"
+
+    def cached_lab(conn) -> str:
+        """自訂條件回測的結果：同一天、同一版資料只算一次（每日流程匯出時通常已經算好存檔）。"""
+        d = q.latest_trade_date(conn)
+        return strategy.load_or_build(conn, d, lab_dir, lab_version(conn)) if d else ""
+
     def cached_backtest(conn, as_of: date | None = None) -> dict:
         key = (as_of, q.backtest_version(conn))
         if key not in bt_cache:
@@ -270,7 +291,8 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
 
     @app.get("/backtest", response_class=HTMLResponse)
     def backtest(request: Request, conn=Depends(db)):
-        return page(request, "backtest.html", cached_backtest(conn))
+        lab_text = cached_lab(conn)
+        return page(request, "backtest.html", cached_backtest(conn) | (lab_context(lab_text) if lab_text else {}))
 
     @app.get("/stock/{symbol}", response_class=HTMLResponse)
     def stock(request: Request, symbol: str, conn=Depends(db)):
@@ -344,6 +366,13 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
         """訊號回測：每種訊號出現後 5／20／60 個交易日（與隔天才買的 20 日）的上漲比例、中位數、四分位數，
         和同一天全部普通股的對照；另附市面說法對照與限制說明。只描述過去，不代表之後。"""
         return backtest_json(cached_backtest(conn)["bt"])
+
+    @app.get("/api/strategy")
+    def api_strategy(conn=Depends(db)):
+        """自訂條件回測：面向與選項、每個條件組合（最多 3 個面向）之後 5／20／60 個交易日與隔天才買 20 日的統計，
+        欄位順序見 fields；today 是最新交易日每檔股票符合哪些條件。只描述過去，不是推薦。"""
+        from fastapi.responses import Response
+        return Response(cached_lab(conn) or "{}", media_type="application/json")
 
     @app.get("/api/signal-types")
     def api_signal_types():

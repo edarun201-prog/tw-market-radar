@@ -93,7 +93,7 @@ def test_sync_then_stock_page_api_and_public_json(conn, client, market, settings
     from radar.web.public_api import build_public_api
     out = build_public_api(conn, market[-1], tmp_path / "public")
     root = tmp_path / "public" / "api" / "v1"
-    assert out["files"] == 4                                                                  # 2 檔股票＋index＋market
+    assert out["files"] == 5                                              # 2 檔股票＋index＋market＋strategy
     idx = json.loads((root / "index.json").read_text(encoding="utf-8"))
     assert [s[0] for s in idx["stocks"]] == ["2317", "2330"] and "disclaimer" in idx and "series.sma5/sma20/sma60" in idx["fields"]
     doc = json.loads((root / "stocks" / "2330.json").read_text(encoding="utf-8"))

@@ -1,0 +1,158 @@
+{# 自訂條件回測：使用者自己組條件（每個面向一個選項，最多 lab.max_picks 個面向），瀏覽器從事先算好的結果裡查。
+   不能執行程式時（例：iPhone 的檔案預覽），只顯示下面的「常見組合」。只描述過去，不是推薦。 #}
+{% if lab %}
+<section class="block lab glass" id="lab" aria-labelledby="lab-title">
+  <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">Strategy Lab</p><h2 id="lab-title">自訂條件回測</h2></div>
+    {% if lab.period.start %}<span class="count">{{ lab.period.start[:10]|replace('-', '/') }}～{{ lab.period.end[:10]|replace('-', '/') }}</span>{% endif %}</div>
+  <p class="lead">自己組選股條件（最多 {{ lab.max_picks }} 個），看過去符合條件的股票之後表現如何，並和同一天全部上市股票（等於隨便挑）比較。這是驗證想法的工具，不是推薦。</p>
+
+  <div class="needs-js lab-ui">
+    <form class="lab-form" id="lab-form" onsubmit="return false">
+      {% for dim in lab.dims %}
+      <fieldset class="lab-dim">
+        <legend>{{ dim.label }}</legend>
+        <div class="lab-opts">
+          <input type="radio" name="lab-{{ dim.key }}" id="lab-{{ dim.key }}-any" value="" checked><label for="lab-{{ dim.key }}-any">不限</label>
+          {% for o in dim.options %}<input type="radio" name="lab-{{ dim.key }}" id="lab-{{ o.key }}" value="{{ o.key }}"><label for="lab-{{ o.key }}" title="{{ o.rule }}">{{ o.label }}</label>{% endfor %}
+        </div>
+      </fieldset>
+      {% endfor %}
+      <div class="lab-actions"><button type="button" class="linklike" id="lab-reset">全部清除</button><span class="small muted" id="lab-hint" aria-live="polite"></span></div>
+    </form>
+    {# 手機上條件很長：底部固定一條摘要，點一下跳到完整結果 #}
+    <button type="button" class="lab-sticky" id="lab-sticky" hidden></button>
+    <div class="lab-out" id="lab-out" aria-live="polite"></div>
+  </div>
+
+  {# 常見組合：伺服器端算好；能執行程式時點一下就套用 #}
+  <div class="lab-presets">
+    <h3 class="h-small">常見組合 <span class="muted small">20 個交易日後，和同一天全部股票比較</span></h3>
+    <div class="scroll"><table class="list">
+      <thead><tr><th>條件</th><th class="num">次數</th><th class="num">上漲比例</th><th class="num">全部股票</th><th class="num">中位數</th><th class="num">全部股票</th><th>對照</th></tr></thead>
+      <tbody>
+      {% for p in lab.presets %}{% set s = p.h20 %}
+        <tr><td><button type="button" class="linklike lab-preset" data-preset="{{ p.key }}">{{ p.label }}</button></td>
+          {% if s %}
+          <td class="num">{{ '{:,}'.format(s[0]) }}</td><td class="num">{{ s[1]|share }}</td><td class="num muted">{{ s[7]|share }}</td>
+          <td class="num {{ s[3]|tone }}">{{ s[3]|ret }}</td><td class="num muted">{{ s[8]|ret }}</td>
+          {% else %}<td class="num">{{ p.events }}</td><td class="muted" colspan="4">還沒有滿 20 個交易日的資料</td>{% endif %}
+          <td class="nowrap"><span class="verdict {{ p.tone }}">{{ p.verdict }}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  <ul class="plain-list small muted">
+    <li>每個條件都用當天收盤後已經知道的資料判斷；報酬從當天收盤起算，已還原除權息；「隔天才買」從下一個交易日收盤起算。</li>
+    <li>連續幾天都符合條件時，後面的報酬期間會重疊，次數看起來多，實際上獨立的樣本比較少。</li>
+    <li>資料只有約一年、大多是同一種盤勢；換一段時間結果可能完全不同。扣成本以手續費 0.1425% × 2 加證交稅 0.3% 估算，沒有算滑價。</li>
+    <li>本益比、EPS 等財報資料從 2026/10 才開始累積，還不能回測。</li>
+  </ul>
+</section>
+<script type="application/json" id="lab-data">{{ lab_json|replace('</', '<\\/')|safe }}</script>
+<script>
+(function () {
+  var lab = JSON.parse(document.getElementById('lab-data').textContent);
+  var form = document.getElementById('lab-form'), out = document.getElementById('lab-out'), hint = document.getElementById('lab-hint');
+  var exportFile = {{ 'true' if export else 'false' }};
+  var VERDICT = { b: ['過去比全部股票好一些', 'up'], s: ['和全部股票差不多', 'flat'], w: ['過去比全部股票差一些', 'down'], f: ['樣本太少（少於 ' + lab.min_samples + ' 筆），看不出來', 'flat'] };
+  var names = {};
+  lab.dims.forEach(function (d) { d.options.forEach(function (o) { names[o.key] = d.label + '：' + o.label; }); });
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function pct(v) { return v === null || v === undefined ? '–' : (v * 100).toFixed(0) + '%'; }
+  function ret(v) { return v === null || v === undefined ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%'; }
+  function tone(v) { return v > 0 ? 'up' : v < 0 ? 'down' : 'flat'; }
+  function picked() {
+    return lab.dims.map(function (d) { var r = form.querySelector('input[name="lab-' + d.key + '"]:checked'); return r ? r.value : ''; }).filter(Boolean);
+  }
+  function stockLink(sym, name) {
+    var a;
+    if (!exportFile) { a = el('a'); a.href = '/stock/' + encodeURIComponent(sym); }
+    else if (document.getElementById('s-' + sym)) { a = el('a'); a.href = '#s-' + sym; }
+    else a = el('span');
+    a.appendChild(el('b', '', sym)); a.appendChild(document.createTextNode(' ' + name));
+    return a;
+  }
+  var sticky = document.getElementById('lab-sticky');
+  sticky.addEventListener('click', function () { out.scrollIntoView({ block: 'start' }); });
+  function summary(keys, r) {
+    sticky.hidden = !keys.length || !r;
+    if (sticky.hidden) return;
+    var s = r[5];
+    sticky.textContent = '';
+    sticky.appendChild(el('span', '', keys.length + ' 個條件・過去 ' + r[0].toLocaleString('en-US') + ' 次' +
+      (s && s[0] >= lab.min_samples ? '・20 日後上漲 ' + pct(s[1]) + '（全部 ' + pct(s[7]) + '）' : '・樣本不足')));
+    sticky.appendChild(el('b', '', '看結果 ↓'));
+  }
+  function render() {
+    var keys = picked(), key = keys.join('+');
+    var r = keys.length ? lab.combos[key] : lab.all;
+    summary(keys, r);
+    out.textContent = '';
+    if (!r) { out.appendChild(el('p', 'empty', '這個組合沒有資料。')); return; }
+    var head = el('div', 'lab-head');
+    head.appendChild(el('p', 'lab-cond', keys.length ? keys.map(function (k) { return names[k]; }).join('＋') : '還沒選條件：下面是全部股票（等於隨便挑）的結果'));
+    var v = VERDICT[r[3]];
+    if (keys.length) head.appendChild(el('span', 'verdict ' + v[1], v[0]));
+    out.appendChild(head);
+    out.appendChild(el('p', 'lab-count', '過去符合 ' + r[0].toLocaleString('en-US') + ' 次（' + r[1].toLocaleString('en-US') + ' 檔、' + r[2] + ' 個交易日）'));
+    var wrap = el('div', 'scroll'), t = el('table', 'list'), thead = el('thead'), tr = el('tr');
+    ['之後', '次數', '上漲比例', '全部股票', '中位數', '全部股票', '中間一半落在', '扣成本後上漲比例'].forEach(function (h, i) { tr.appendChild(el('th', i ? 'num' : '', h)); });
+    thead.appendChild(tr); t.appendChild(thead);
+    var tb = el('tbody');
+    lab.horizons.forEach(function (h, i) {
+      var s = r[4 + i], row = el('tr');
+      row.appendChild(el('td', 'nowrap', h.label));
+      if (!s) { var td = el('td', 'muted', '還沒有資料'); td.colSpan = 7; row.appendChild(td); tb.appendChild(row); return; }
+      var few = s[0] < lab.min_samples;
+      row.appendChild(el('td', 'num', s[0].toLocaleString('en-US')));
+      row.appendChild(el('td', 'num', few ? '樣本不足' : pct(s[1])));
+      row.appendChild(el('td', 'num muted', pct(s[7])));
+      row.appendChild(el('td', 'num ' + (few ? '' : tone(s[3])), few ? '–' : ret(s[3])));
+      row.appendChild(el('td', 'num muted', ret(s[8])));
+      row.appendChild(el('td', 'num', few ? '–' : ret(s[5]) + ' ～ ' + ret(s[6])));
+      row.appendChild(el('td', 'num', few ? '–' : pct(s[2])));
+      tb.appendChild(row);
+    });
+    t.appendChild(tb); wrap.appendChild(t); out.appendChild(wrap);
+    out.appendChild(el('p', 'small muted', '「上漲比例」是之後股價比那天高的次數占多少；「中間一半落在」是把結果由低到高排好，中間 50% 的範圍，可以看出結果有多分散。'));
+    if (!keys.length) return;
+    // 今天符合這組條件的股票（只是條件篩選，不是推薦）
+    var hits = lab.today.filter(function (s) { var on = ' ' + s[5] + ' '; return keys.every(function (k) { return on.indexOf(' ' + k + ' ') >= 0; }); });
+    var box = el('div', 'lab-today');
+    box.appendChild(el('h3', 'h-small', lab.date.slice(0, 10).replace(/-/g, '/') + ' 收盤符合這組條件：' + hits.length + ' 檔'));
+    if (hits.length) {
+      var ul = el('ul', 'lab-hits');
+      hits.slice(0, 40).forEach(function (s) {
+        var li = el('li'); li.appendChild(stockLink(s[0], s[1]));
+        li.appendChild(el('span', 'num small ' + tone(s[4]), ret(s[4])));
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+      if (hits.length > 40) box.appendChild(el('p', 'small muted', '只列前 40 檔（依代號）。'));
+    }
+    box.appendChild(el('p', 'small muted', '這只是符合條件的清單，依代號排序，不是推薦，也不代表之後會和過去一樣。'));
+    out.appendChild(box);
+  }
+  form.addEventListener('change', function (e) {
+    if (picked().length > lab.max_picks) {
+      var any = form.querySelector('input[name="' + e.target.name + '"][value=""]');
+      if (any) any.checked = true;
+      hint.textContent = '最多同時選 ' + lab.max_picks + ' 個條件（條件越多，符合的次數越少，結果越不可靠）。';
+    } else hint.textContent = '';
+    render();
+  });
+  document.getElementById('lab-reset').addEventListener('click', function () {
+    form.querySelectorAll('input[value=""]').forEach(function (r) { r.checked = true; }); hint.textContent = ''; render();
+  });
+  document.querySelectorAll('.lab-preset').forEach(function (b) {
+    b.addEventListener('click', function () {
+      form.querySelectorAll('input[value=""]').forEach(function (r) { r.checked = true; });
+      b.dataset.preset.split('+').forEach(function (k) { var r = document.getElementById('lab-' + k); if (r) r.checked = true; });
+      hint.textContent = ''; render();
+      document.getElementById('lab').scrollIntoView({ block: 'start' });
+    });
+  });
+  render();
+})();
+</script>
+{% endif %}

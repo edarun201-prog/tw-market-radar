@@ -12,7 +12,9 @@ from pathlib import Path
 from radar.config import TAIPEI
 from radar.formatting import fmt_price, fmt_ret, fmt_yi, tone
 from radar.web import queries as q
-from radar.web.app import HERE, about_context, backtest_context, home_context, make_templates, stock_context
+from radar import strategy
+from radar.web.app import (HERE, about_context, backtest_context, home_context, lab_context, lab_version, make_templates,
+                           stock_context)
 
 MAX_STOCKS = 80
 CHART_DAYS, FLOW_DAYS = 120, 40
@@ -46,8 +48,11 @@ def _round(v, n: int):
     return None if v is None else round(float(v), n)
 
 
-def render_day(conn, d: date) -> str:
+def render_day(conn, d: date, lab_dir: Path | None = None) -> str:
     ctx = home_context(conn, d)
+    # 自訂條件回測：結果存在 lab_dir（網站與公開 JSON 共用同一份）；沒給就直接算
+    lab_text = (strategy.load_or_build(conn, d, lab_dir, lab_version(conn)) if lab_dir
+                else strategy.to_json(strategy.build_lab(conn, d)))
     symbols = list(dict.fromkeys(r["symbol"] for sec in ctx["radar"] for it in sec["types"] for r in it["rows"]))
     stocks = []
     for symbol in symbols[:MAX_STOCKS]:
@@ -57,7 +62,7 @@ def render_day(conn, d: date) -> str:
                                         ranges=EXPORT_CHART_RANGES))
     included = {st["s"]["symbol"] for st in stocks}
     return make_templates().env.get_template("export.html").render(
-        ctx | about_context(conn) | backtest_context(conn, d) | {
+        ctx | about_context(conn) | backtest_context(conn, d) | lab_context(lab_text) | {
             "export": True,
             "stocks": stocks,
             "omitted": len(symbols) - len(stocks),
@@ -74,7 +79,7 @@ def export_day(conn, d: date, out_dir: Path) -> Path:
     """寫出 台股雷達_YYYY-MM-DD.html；d 是最新交易日時，也覆蓋 台股雷達_最新.html（方便固定傳同一個檔名）。
     匯出過去的日子不會動到「最新」。"""
     out_dir.mkdir(parents=True, exist_ok=True)
-    html = render_day(conn, d)
+    html = render_day(conn, d, out_dir.parent / "strategy")
     path = out_dir / f"台股雷達_{d:%Y-%m-%d}.html"
     latest = conn.execute("SELECT max(trade_date) FROM market_breadth").fetchone()[0]
     targets = [path] + ([out_dir / "台股雷達_最新.html"] if d == latest else [])
