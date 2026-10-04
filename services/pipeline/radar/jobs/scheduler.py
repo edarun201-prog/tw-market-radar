@@ -118,6 +118,11 @@ def update_tpex(settings: Settings) -> None:
     log.info("上櫃 %s：%s", latest, dict(r.status))
 
 
+def update_fundamentals(settings: Settings) -> None:
+    from radar.jobs.fundamentals import update_fundamentals as run
+    run(settings)
+
+
 def update_analytics(settings: Settings) -> None:
     """特徵與訊號：從上次算到的日子往前 7 天重算到最新的行情日（涵蓋補抓的日子；重算結果相同）。"""
     from radar.features import build_features
@@ -163,16 +168,19 @@ def export_latest(settings: Settings) -> None:
 
 
 def publish_latest_pages(settings: Settings, force: bool = False) -> None:
-    """公開網頁：.env 有 PAGES_REPO 才發布最新的單一 HTML 檔到 gh-pages（內容沒變就不推）。"""
+    """公開網頁：.env 有 PAGES_REPO 才發布最新的單一 HTML 檔與公開 JSON（api/v1/）到 gh-pages（內容沒變就不推）。"""
     if not settings.pages_repo:
         return
     from radar.jobs.pages import publish_pages
+    from radar.web.public_api import build_public_api
+    public = settings.export_dir.parent / "public_api"
     with repo.connect(settings.web_database_url) as conn:
         d = conn.execute("SELECT max(trade_date) FROM market_breadth").fetchone()[0]
-    if d is None:
-        return
+        if d is None:
+            return
+        log.info("公開 JSON：%s", build_public_api(conn, d, public))
     publish_pages(settings.export_dir / f"台股雷達_{d:%Y-%m-%d}.html", settings.export_dir.parent / "pages",
-                  settings.pages_repo, label=d.isoformat(), force=force)
+                  settings.pages_repo, label=d.isoformat(), force=force, extra=public)
 
 
 def _safe(step, settings: Settings, label: str) -> None:
@@ -188,6 +196,7 @@ def daily_job(settings: Settings) -> None:
     _safe(refresh_reference_data, settings, "更新除權息／公司資料／休市日曆")
     run_today(settings)
     _safe(update_tpex, settings, "上櫃（櫃買中心）")
+    _safe(update_fundamentals, settings, "估值與財報")
     _safe(update_analytics, settings, "計算特徵與訊號")
     _safe(update_summary, settings, "盤後摘要")
     _safe(export_latest, settings, "匯出 HTML 檔")
@@ -225,6 +234,7 @@ def run_daily(settings: Settings) -> None:
     else:
         log.info("還沒到今天的排程時間（%02d:%02d）或是週末，只做補抓", settings.schedule_hour, settings.schedule_minute)
     _safe(update_tpex, settings, "上櫃（櫃買中心）")
+    _safe(update_fundamentals, settings, "估值與財報")
     _safe(update_analytics, settings, "計算特徵與訊號")
     _safe(update_summary, settings, "盤後摘要")
     _safe(export_latest, settings, "匯出 HTML 檔")

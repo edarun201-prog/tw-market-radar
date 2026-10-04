@@ -15,6 +15,10 @@ from typing import Any, Protocol
 log = logging.getLogger(__name__)
 
 
+# 綜合損益表的產業格式：一般業、銀行、證券期貨、金控、保險、異業
+REPORT_TYPES = ("ci", "basi", "bd", "fh", "ins", "mim")
+
+
 class FetchError(RuntimeError):
     """網路錯誤、被擋、回傳格式不是 JSON 等，可重試的錯誤。"""
 
@@ -94,6 +98,20 @@ class PoliteHttpAdapter:
                 log.warning("%s 第 %d 次失敗：%s；%d 秒後重試", label, attempt, e, backoff)
                 time.sleep(backoff)
         raise FetchError(f"{label} 抓取失敗：{last_err}")
+
+    def _get_rows(self, url: str, label: str) -> tuple[list[dict], str]:
+        """OpenAPI 的資料清單（list of dict）；格式不對就 FetchError。"""
+        rows, real_url = self._get_json(url, {}, label)
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            raise FetchError(f"{label} 回應不是資料清單：{str(rows)[:200]}")
+        return rows, real_url
+
+    def fetch_financial_reports(self, as_of: date) -> RawPayload:
+        """綜合損益表（最新一季、年度累計），各產業格式各一個資料集；子類別設定 FIN_REPORT_URL（含 {kind}）。"""
+        body, url = {}, ""
+        for kind in REPORT_TYPES:
+            body[kind], url = self._get_rows(self.FIN_REPORT_URL.format(kind=kind), f"{self.source_code} 綜合損益表 {kind}")
+        return self._payload("FIN_REPORT", as_of, url, body, any(body.values()), {k: len(v) for k, v in body.items()})
 
     def _payload(self, dataset: str, d: date, url: str, body, has_data: bool, meta: dict) -> RawPayload:
         from radar.config import TAIPEI

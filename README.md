@@ -18,7 +18,7 @@
 | 12 | 上櫃股票 | 進行中；櫃買中心 OpenAPI 每天抓最新一天（行情、三大法人、除權息、櫃買指數、漲跌家數、公司產業別），搜尋、個股頁、今日市場、盤中即時都包含上櫃。OpenAPI 沒有歷史，上櫃的訊號要累積 20～60 個交易日才會陸續出現 |
 | 11 | 訊號回測（Phase 3） | 完成；每筆訊號之後 5／20／60 日的還原報酬，和同一天全部股票比較；新手／標準／進階三種深度，進階有「市面說法 vs 資料」與限制說明。見 `docs/signals.md` |
 
-範圍：上市（TWSE）＋上櫃（TPEX，2026-10-02 起每天收集）。測試 102 項（`pytest -q`）。
+範圍：上市（TWSE）＋上櫃（TPEX，2026-10-02 起每天收集）。測試 110 項（`pytest -q`）。
 
 **架構調整**：原規劃網站用 Next.js。開發機是 4 GB 記憶體的筆電，Next.js 建置要 1 GB 以上且每次改動都要重建，
 所以改成 Python（FastAPI）直接產生 HTML，圖表在伺服器端畫成 SVG，沒有前端建置、開著時約占 85 MB（實測），
@@ -45,6 +45,8 @@ flowchart LR
 | TWT49U | 除權除息計算結果表（一次一個月） | 每天重抓當月 | `corporate_actions` |
 | t187ap03_L＋t187ap14_L | 上市公司基本資料＋產業名稱（OpenAPI） | 每 7 天 | `industries`、`stocks.industry_id` |
 | holidaySchedule | 當年度休市日曆（OpenAPI） | 每 7 天 | `trading_calendar`（今天以後） |
+| BWIBBU_ALL＋tpex_mainboard_peratio_analysis | 本益比、殖利率、股價淨值比（上市＋上櫃，OpenAPI 最新一天） | 每天 | `valuations` |
+| t187ap06_L_*＋mopsfin_t187ap06_O_* | 綜合損益表：EPS、營業收入、稅後淨利（年度累計，OpenAPI 最新一季） | 每天 | `financial_reports` |
 
 所有寫入都是 upsert，重跑不會重複；每次抓取都記錄在 `ingestion_runs`。原始回應都先存檔，改了解析規則可以從檔案重算。
 
@@ -126,6 +128,9 @@ docker compose up -d worker                                # 常駐排程，每�
 - GitHub 儲存庫的 **Settings → Pages → Build and deployment** 要選 **Deploy from a branch**、分支 **gh-pages**、資料夾 **/ (root)**。
 - 手動發布：`python -m radar pages`（`--force` 內容沒變也重推）。
 - 公開的是盤後快照，沒有伺服器，不含盤中即時行情。
+- 同時發布**公開 JSON**（`radar/web/public_api.py`）給需要的人用程式讀取，不需要金鑰：
+  `api/v1/index.json`（欄位說明、來源與聲明、股票清單）、`api/v1/market.json`（大盤、市場狀態、3 大重點、當天訊號）、
+  `api/v1/stocks/{代號}.json`（近 120 個交易日的開高低收量、SMA5／20／60、EMA12／26、MACD、估值、財報、訊號）。約 2,400 個檔案、17 MB。
 
 ### App 模式
 
@@ -166,6 +171,7 @@ docker compose up -d worker                                # 常駐排程，每�
 | `analyze [--start D] [--end D] [--report-only]` | 重算特徵、訊號與回測，印出每天訊號數 |
 | `outcomes` | 只重算訊號回測（每筆訊號之後的報酬與比較基準，約 40 秒） |
 | `tpex` | 上櫃：抓櫃買中心 OpenAPI 目前提供的最新一天（每日流程也會做） |
+| `fundamentals` | 估值（本益比、殖利率、淨值比）與最新一季財報（EPS），上市＋上櫃，每天 14 次請求（每日流程也會做） |
 | `summary [--date D] [--all] [--simulate] [--force] [--show-facts]` | 盤後摘要；沒有金鑰或加 `--simulate` 用模擬摘要，`--all` 補齊所有交易日 |
 | `export [--date D] [--out DIR]` | 把某一天存成一個離線 HTML 檔（預設 `data/exports`） |
 | `pages [--force]` | 匯出最新一天並發布到 GitHub Pages 的 `gh-pages` 分支（`.env` 要設定 `PAGES_REPO`；每日流程也會做） |
@@ -199,6 +205,8 @@ cd services\pipeline
 | `test_tpex.py` | 上櫃：正規化、OpenAPI 只有最新一天、不把沒資料的日子記成休市、和上市分開驗證筆數、網站與盤中即時 |
 | `test_live.py` | 盤中即時：解析證交所回應、開盤時段、代號檢查、快取共用、上游失敗時的處理、可替換的資料來源、匯出檔不含即時 |
 | `test_pages.py` | 公開網頁：`gh-pages` 只留一個 commit、首頁就是匯出檔、內容沒變不推、壞掉的匯出檔不發布（用本機空儲存庫當遠端） |
+| `test_indicators.py` | 技術指標：SMA、EMA（以 SMA 起算）、MACD 的定義；不論顯示幾天，起算點相同、數字一致 |
+| `test_fundamentals.py` | 估值與財報：上市／上櫃兩種格式、千元換元、本益比空白、金控營收不猜、入庫重跑不重複、個股頁與 API、公開 JSON、過去的快照看不到之後的財報 |
 | `test_backtest.py` | 回測：後續報酬連乘、隔天才買、同一天全部股票的基準、快照只用當時已知的結果、文字只描述過去 |
 
 ## 資料夾

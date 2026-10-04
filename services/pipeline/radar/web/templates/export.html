@@ -54,7 +54,8 @@
 {% for st in stocks %}
 <article class="view stock-section" id="s-{{ st.s.symbol }}" data-view="stock" data-title="{{ st.s.symbol }} {{ st.s.name }}">
   {% with s=st.s, last=st.last, signals=st.signals, actions=st.actions, kcharts=st.kcharts, chips=st.chips, flows_svg=st.flows_svg,
-          peers=st.peers, range=st.range, flow_days=st.flow_days, story=st.story %}
+          peers=st.peers, range=st.range, flow_days=st.flow_days, story=st.story, tech=st.tech,
+          valuation=st.valuation, financials=st.financials %}
   {% include "_stock_body.html" %}
   {% endwith %}
 </article>

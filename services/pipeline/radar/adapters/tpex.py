@@ -23,6 +23,7 @@ URLS = {
     "insti": f"{OPENAPI}/tpex_3insti_daily_trading",             # 三大法人買賣明細
     "exright": f"{OPENAPI}/tpex_exright_daily",                  # 除權除息計算結果表（當天）
     "company": f"{OPENAPI}/mopsfin_t187ap03_O",                  # 上櫃公司基本資料（產業別代碼）
+    "peratio": f"{OPENAPI}/tpex_mainboard_peratio_analysis",     # 本益比、殖利率、股價淨值比（最新一天）
 }
 HEADERS = {"User-Agent": "tw-market-radar/0.1 (after-hours research project)", "Accept": "application/json"}
 
@@ -38,6 +39,7 @@ def roc_date(s: str) -> date:
 class TpexAdapter(PoliteHttpAdapter):
     source_code = "TPEX"
     drives_calendar = False
+    FIN_REPORT_URL = f"{OPENAPI}/mopsfin_t187ap06_O_{{kind}}"     # 上櫃公司綜合損益表（最新一季）
 
     def __init__(self, settings: Settings, client: httpx.Client | None = None):
         super().__init__(settings, client or httpx.Client(headers=HEADERS, timeout=settings.request_timeout_sec))
@@ -79,6 +81,10 @@ class TpexAdapter(PoliteHttpAdapter):
         """只有最新一天的除權息；normalizer 只取 start～end 之間的。"""
         rows, url = self._rows("exright", f"TPEX 除權息 {start}～{end}")
         return self._payload("TWT49U", start, url, {"data": rows}, True, {"end": end.isoformat()})
+
+    def fetch_valuations(self, as_of: date) -> RawPayload:
+        rows, url = self._rows("peratio", "TPEX 本益比")
+        return self._payload("BWIBBU", as_of, url, {"data": rows}, bool(rows), {"rows": len(rows)})
 
     def fetch_company_profiles(self, as_of: date) -> RawPayload:
         rows, url = self._rows("company", "TPEX 上櫃公司基本資料")

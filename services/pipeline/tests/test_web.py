@@ -117,7 +117,7 @@ def test_stock_page_explains_why(client, market):
     order = [html.index(s) for s in ('class="stock-head', "為什麼被雷達抓到？", "數據狀態", "接下來可以查看", 'id="price-2330"',
                                      'id="flows-2330"', 'id="history-2330"')]
     assert order == sorted(order)
-    assert '<details class="kline"' not in html and 'class="kchart scroll"' in html   # K 線不再收起來
+    assert '<details class="kline"' not in html and 'class="kchart"' in html   # K 線不再收起來
     for anchor in re.findall(r'href="#([a-z]+-2330)"', html):                   # 研究路徑的每個連結都有對應段落
         assert f'id="{anchor}"' in html
 

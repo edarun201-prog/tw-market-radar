@@ -12,6 +12,7 @@
   analyze    計算特徵（還原價）與異常訊號，印出每天訊號數
   pages      公開網頁：把最新的 HTML 檔推到 GitHub Pages（.env 設定 PAGES_REPO 才會做；每日流程也會做）
   tpex       上櫃（櫃買中心 OpenAPI）：抓最新一天的行情、三大法人、除權息（每日流程也會做）
+  fundamentals 估值與財報：本益比、殖利率、淨值比（每天）與最新一季 EPS（每日流程也會做）
   outcomes   訊號回測：重算每一筆訊號之後的報酬（analyze 也會順便做）
   summary    盤後摘要（有 Claude API 金鑰用 AI，沒有就用模擬摘要）
   export     把某一天的網站存成一個 HTML 檔
@@ -195,6 +196,12 @@ def cmd_tpex(args, settings) -> None:
     update_tpex(settings)
 
 
+def cmd_fundamentals(args, settings) -> None:
+    from radar.jobs.fundamentals import update_fundamentals
+    for k, v in update_fundamentals(settings).items():
+        print(f"{k}：{v}")
+
+
 def cmd_outcomes(args, settings) -> None:
     from radar.outcomes import build_outcomes
     with repo.connect(settings.database_url) as conn:
@@ -332,6 +339,9 @@ def main() -> None:
     p = sub.add_parser("pages", help="公開網頁：把最新的單一 HTML 檔發布到 GitHub Pages（gh-pages 分支）")
     p.add_argument("--force", action="store_true", help="內容沒變也重新推送")
     p.set_defaults(fn=cmd_pages)
+
+    p = sub.add_parser("fundamentals", help="估值（本益比、殖利率、淨值比）與財報（最新一季 EPS），上市與上櫃")
+    p.set_defaults(fn=cmd_fundamentals)
 
     p = sub.add_parser("tpex", help="上櫃（櫃買中心 OpenAPI）：抓它目前提供的最新一天")
     p.set_defaults(fn=cmd_tpex)

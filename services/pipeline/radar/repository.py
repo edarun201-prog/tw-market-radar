@@ -297,3 +297,39 @@ def write_company_profiles(conn, s: CompanySnapshot) -> int:
              for c in s.companies],
         )
     return len(s.companies)
+
+
+# ---- 估值與財報 ---------------------------------------------------------------
+def _stock_ids(conn, market: str) -> dict[str, int]:
+    return dict(conn.execute("SELECT symbol, id FROM stocks WHERE market = %s", (market,)).fetchall())
+
+
+def write_valuations(conn, src: int, market: str, day) -> tuple[int, int]:
+    """寫入一天的估值（重跑會覆蓋）；回傳（寫入筆數, 不在股票清單而略過的筆數）。"""
+    ids = _stock_ids(conn, market)
+    rows = [(ids[v.symbol], day.trade_date, v.pe_ratio, v.dividend_yield, v.pb_ratio, src) for v in day.rows if v.symbol in ids]
+    with conn.cursor() as cur:
+        cur.executemany(
+            """INSERT INTO valuations (stock_id, trade_date, pe_ratio, dividend_yield, pb_ratio, source_id)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (stock_id, trade_date) DO UPDATE
+                  SET pe_ratio = EXCLUDED.pe_ratio, dividend_yield = EXCLUDED.dividend_yield,
+                      pb_ratio = EXCLUDED.pb_ratio, source_id = EXCLUDED.source_id""", rows)
+    return len(rows), len(day.rows) - len(rows)
+
+
+def write_financial_reports(conn, src: int, market: str, reports) -> tuple[int, int]:
+    """寫入財報（同一家、同一年、同一季重跑會覆蓋）；回傳（寫入筆數, 略過筆數）。"""
+    ids = _stock_ids(conn, market)
+    rows = [(ids[r.symbol], r.fiscal_year, r.quarter, r.report_type, r.revenue, r.net_income, r.eps, r.published_on, src)
+            for r in reports if r.symbol in ids]
+    with conn.cursor() as cur:
+        cur.executemany(
+            """INSERT INTO financial_reports (stock_id, fiscal_year, quarter, report_type, revenue, net_income, eps,
+                                              published_on, source_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (stock_id, fiscal_year, quarter) DO UPDATE
+                  SET report_type = EXCLUDED.report_type, revenue = EXCLUDED.revenue, net_income = EXCLUDED.net_income,
+                      eps = EXCLUDED.eps, published_on = EXCLUDED.published_on, source_id = EXCLUDED.source_id,
+                      updated_at = now()""", rows)
+    return len(rows), len(reports) - len(rows)

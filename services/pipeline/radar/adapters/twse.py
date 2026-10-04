@@ -27,6 +27,7 @@ EX_RIGHTS_URL = f"{BASE}/exRight/TWT49U"                 # 除權除息計算結
 COMPANY_URL = f"{OPENAPI}/opendata/t187ap03_L"           # 上市公司基本資料：產業別只有代碼
 INDUSTRY_NAME_URL = f"{OPENAPI}/opendata/t187ap14_L"     # 上市公司各產業 EPS 統計：產業別是名稱
 HOLIDAY_URL = f"{OPENAPI}/holidaySchedule/holidaySchedule"  # 當年度集中市場開（休）市日期
+VALUATION_URL = f"{OPENAPI}/exchangeReport/BWIBBU_ALL"   # 個股本益比、殖利率、股價淨值比（最新一天）
 HEADERS = {
     "User-Agent": "tw-market-radar/0.1 (after-hours research project)",
     "Accept": "application/json",
@@ -36,6 +37,7 @@ HEADERS = {
 class TwseAdapter(PoliteHttpAdapter):
     source_code = "TWSE"
     drives_calendar = True      # 交易日曆以證交所為準
+    FIN_REPORT_URL = f"{OPENAPI}/opendata/t187ap06_L_{{kind}}"   # 上市公司綜合損益表（最新一季）
 
     def __init__(self, settings: Settings, client: httpx.Client | None = None):
         super().__init__(settings, client or httpx.Client(headers=HEADERS, timeout=settings.request_timeout_sec))
@@ -75,6 +77,11 @@ class TwseAdapter(PoliteHttpAdapter):
         if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
             raise FetchError(f"休市日曆回應不是資料清單：{str(rows)[:200]}")
         return self._payload("HOLIDAY", as_of, url, {"data": rows}, bool(rows), {"rows": len(rows)})
+
+    def fetch_valuations(self, as_of: date) -> RawPayload:
+        """本益比、殖利率、股價淨值比（OpenAPI 只有最新一天，1 次請求）；as_of 是抓取日，資料日期在每一列的 Date。"""
+        rows, url = self._get_rows(VALUATION_URL, "BWIBBU 本益比")
+        return self._payload("BWIBBU", as_of, url, {"data": rows}, bool(rows), {"rows": len(rows)})
 
     # ---- internals ----------------------------------------------------
     def _fetch(self, dataset: str, d: date) -> RawPayload:

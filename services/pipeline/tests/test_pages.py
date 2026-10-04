@@ -42,3 +42,19 @@ def test_refuses_to_publish_a_broken_export(tmp_path, remote):
         publish_pages(src, tmp_path / "pages", str(remote))
     with pytest.raises(RuntimeError):
         publish_pages(tmp_path / "不存在.html", tmp_path / "pages", str(remote))
+
+
+def test_extra_folder_is_published_and_changes_trigger_a_push(tmp_path, remote):
+    src = tmp_path / "台股雷達_2026-10-02.html"
+    src.write_text("<!doctype html><title>雷達</title>" + "x" * 200_000, encoding="utf-8")
+    extra = tmp_path / "public"
+    (extra / "api" / "v1" / "stocks").mkdir(parents=True)
+    (extra / "api" / "v1" / "index.json").write_text('{"date":"2026-10-02"}', encoding="utf-8")
+    (extra / "api" / "v1" / "stocks" / "2330.json").write_text('{"symbol":"2330"}', encoding="utf-8")
+    work = tmp_path / "pages"
+    assert publish_pages(src, work, str(remote), extra=extra) == "published"
+    files = git(remote, "ls-tree", "-r", "--name-only", BRANCH).split()
+    assert {"index.html", ".nojekyll", "api/v1/index.json", "api/v1/stocks/2330.json"} <= set(files)
+    assert publish_pages(src, work, str(remote), extra=extra) == "unchanged"
+    (extra / "api" / "v1" / "stocks" / "2330.json").write_text('{"symbol":"2330","close":1}', encoding="utf-8")
+    assert publish_pages(src, work, str(remote), extra=extra) == "published"      # 只有 JSON 變了也要重新發布

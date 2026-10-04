@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from radar import explain, live
+from radar import explain, indicators, live
 from radar.config import TAIPEI, load_settings
 from radar.formatting import (fmt_day, fmt_lots, fmt_pct, fmt_price, fmt_ret, fmt_signed, fmt_yi, tone)
 from radar.outcomes import ROUND_TRIP_COST
@@ -106,21 +106,27 @@ def home_context(conn, day: date, requested: date | None = None) -> dict:
 
 
 def price_charts(prices: list[dict], sigs: list[dict], acts: list[dict],
-                 ranges: list[tuple[str, int]] = CHART_RANGES) -> list[dict]:
+                 ranges: list[tuple[str, int]] = CHART_RANGES, ind: dict[str, list] | None = None) -> list[dict]:
     """K 線的各個時間範圍（1M／3M／6M／1Y）；預設 3M，資料不夠時改成最長的那個。"""
     avail = [(label, n) for label, n in ranges if len(prices) >= n]
     if not avail and prices:
         avail = [(f"{len(prices)} 日", len(prices))]
     default = "3M" if any(label == "3M" for label, _ in avail) else (avail[-1][0] if avail else None)
+    ind = ind or {}
     return [{"label": label, "days": n, "default": label == default,
-             "svg": charts.price_chart(prices[-n:], sigs, acts, TYPES)} for label, n in avail]
+             "svg": charts.price_chart(prices[-n:], sigs, acts, TYPES, ind=indicators.tail(ind, n)),
+             "macd_svg": charts.macd_chart(prices[-n:], indicators.tail(ind, n)) if ind else ""}
+            for label, n in avail]
 
 
 def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of: date | None = None,
                   ranges: list[tuple[str, int]] = CHART_RANGES) -> dict:
     """個股頁的資料。as_of：只用這天（含）以前的資料（匯出過去的日子）；不指定就是最新。
     ranges：K 線要畫哪些時間範圍（匯出檔只畫兩個，檔案比較小）。"""
-    prices = q.stock_prices(conn, prof["id"], days, as_of)
+    # 指標從固定的起算點算（indicators.lookback），網站、匯出檔、API 的數字才一致；其餘都只用最近 days 天
+    full = q.stock_prices(conn, prof["id"], indicators.lookback(days), as_of)
+    ind_full = indicators.compute(full)
+    prices, ind = full[-days:], indicators.tail(ind_full, days)
     sigs = q.stock_signals(conn, prof["id"], as_of)
     acts = q.stock_actions(conn, prof["id"], as_of)
     last = prices[-1] if prices else None
@@ -132,7 +138,10 @@ def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of:
         "s": prof, "last": last, "signals": sigs, "actions": acts, "flow_days": flow_days,
         "story": explain.stock_story(last, today, recent),
         "chips": [explain.signal_chip(x) for x in today][:3],
-        "kcharts": price_charts(prices, sigs, acts, ranges),
+        "kcharts": price_charts(prices, sigs, acts, ranges, ind),
+        "tech": explain.indicator_view(last, indicators.latest(ind)),
+        "valuation": explain.valuation_view(q.stock_valuation(conn, prof["id"], as_of)),
+        "financials": explain.financial_rows(q.stock_financials(conn, prof["id"], as_of)),
         "flows_svg": charts.flows_chart(q.stock_flows(conn, prof["id"], flow_days, as_of)),
         "peers": q.industry_peers(conn, prof["id"], last["trade_date"]) if last and prof["industry"] else [],
         "range": (prices[0]["trade_date"], prices[-1]["trade_date"]) if prices else None,
@@ -352,13 +361,29 @@ def create_app(db_url: str | None = None, live_feed: live.LiveFeed | None = None
 
     @app.get("/api/stocks/{symbol}")
     def api_stock(symbol: str, days: int = Query(250, ge=1, le=1000), conn=Depends(db)):
-        """個股：基本資料、日行情與特徵、法人買賣超、訊號歷史、除權息。"""
+        """個股：基本資料、日行情與特徵、法人買賣超、訊號歷史、除權息、估值（本益比等）、財報（年度累計 EPS）。"""
         prof = q.stock_profile(conn, symbol.upper())
         if prof is None:
             raise HTTPException(404, f"找不到證券代號 {symbol}")
         sid = prof.pop("id")
         return {"profile": prof, "prices": q.stock_prices(conn, sid, days), "flows": q.stock_flows(conn, sid, days),
-                "signals": q.stock_signals(conn, sid), "corporate_actions": q.stock_actions(conn, sid)}
+                "signals": q.stock_signals(conn, sid), "corporate_actions": q.stock_actions(conn, sid),
+                "valuation": q.stock_valuation(conn, sid),
+                "financials": [{k: v for k, v in r.items() if k not in ("period", "span")}
+                               for r in explain.financial_rows(q.stock_financials(conn, sid))]}
+
+    @app.get("/api/stocks/{symbol}/indicators")
+    def api_stock_indicators(symbol: str, days: int = Query(120, ge=1, le=1000), conn=Depends(db)):
+        """技術指標：SMA5／20／60、EMA12／26、MACD（DIF、訊號線、OSC），用原始收盤價計算；和日期、收盤價一起回傳。"""
+        prof = q.stock_profile(conn, symbol.upper())
+        if prof is None:
+            raise HTTPException(404, f"找不到證券代號 {symbol}")
+        full = q.stock_prices(conn, prof["id"], indicators.lookback(days))
+        ind = indicators.tail(indicators.compute(full), days)
+        rows = full[-days:]
+        return {"symbol": prof["symbol"], "name": prof["name"], "method": "原始收盤價；EMA 以前 n 日 SMA 為起點；MACD(12, 26, 9)",
+                "dates": [r["trade_date"] for r in rows], "close": [r["close"] for r in rows],
+                **{k: [None if v is None else round(v, 4) for v in vals] for k, vals in ind.items()}}
 
     @app.get("/api/stocks/{symbol}/explain")
     def api_stock_explain(symbol: str, conn=Depends(db)):

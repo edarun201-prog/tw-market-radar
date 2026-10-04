@@ -306,3 +306,24 @@ def backtest_period(conn, as_of: date | None = None) -> dict:
     return {"start": row.get("start"), "end": row.get("end"), "n": row.get("n") or 0,
             "index_from": float(a) if a else None, "index_to": float(b) if b else None,
             "index_change": float(b) / float(a) - 1 if a and b else None}
+
+
+# ---- 估值與財報 -------------------------------------------------------------
+# 財報「最晚什麼時候已經公開」：官方的出表日期只是開放資料產生的日子，不是公告日，所以和法定期限取較早的一個。
+# 期限用各產業最晚的（第 1 季 5/31、第 2 季 8/31、第 3 季 11/30、年報隔年 3/31），寧可晚一點顯示，也不讓過去的快照看到之後的財報。
+FIN_KNOWN_BY = """LEAST(published_on, make_date(fiscal_year + (quarter = 4)::int,
+                                               (ARRAY[5, 8, 11, 3])[quarter], (ARRAY[31, 31, 30, 31])[quarter]))"""
+
+def stock_valuation(conn, stock_id: int, until: date | None = None) -> dict | None:
+    """最近一個交易日（不晚於 until）的本益比、殖利率、股價淨值比。"""
+    return _one(conn, """SELECT trade_date, pe_ratio, dividend_yield, pb_ratio FROM valuations
+                          WHERE stock_id = %(id)s AND (%(until)s::date IS NULL OR trade_date <= %(until)s)
+                          ORDER BY trade_date DESC LIMIT 1""", {"id": stock_id, "until": until})
+
+
+def stock_financials(conn, stock_id: int, until: date | None = None, limit: int = 8) -> list[dict]:
+    """最近幾季的綜合損益（年度累計），新的在前；until：只取那天以前公布的（匯出過去的日子）。"""
+    return _all(conn, """SELECT fiscal_year, quarter, report_type, revenue, net_income, eps, published_on
+                           FROM financial_reports
+                          WHERE stock_id = %(id)s AND (%(until)s::date IS NULL OR """ + FIN_KNOWN_BY + """ <= %(until)s)
+                          ORDER BY fiscal_year DESC, quarter DESC LIMIT %(n)s""", {"id": stock_id, "until": until, "n": limit})

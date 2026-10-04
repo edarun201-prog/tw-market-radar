@@ -40,9 +40,25 @@ def _month_labels(dates: list[date]) -> list[tuple[int, str]]:
     return out[1:] if len(out) > 1 and out[1][0] - out[0][0] < 12 else out
 
 
+MA_LINES = (("sma5", "ma5", "SMA5"), ("sma20", "ma20", "SMA20"), ("sma60", "ma60", "SMA60"))
+
+
+def _path(xs: list[float], ys: list[float | None]) -> str:
+    """折線：遇到沒有值的日子就斷開。"""
+    out, pen = [], False
+    for x, y in zip(xs, ys):
+        if y is None:
+            pen = False
+            continue
+        out.append(f"{'L' if pen else 'M'}{x:.1f},{y:.1f}")
+        pen = True
+    return "".join(out)
+
+
 def price_chart(prices: list[dict], signals: list[dict], actions: list[dict], labels: dict[str, str],
-                width: int = 960) -> str:
-    """K 線＋成交量。signals、actions 會標在對應日期上（滑過顯示說明）。"""
+                width: int = 960, ind: dict[str, list] | None = None) -> str:
+    """K 線＋成交量。signals、actions 會標在對應日期上（滑過顯示說明）。
+    ind：技術指標（和 prices 同長度），有的話畫 SMA5／20／60（標準模式才顯示，class="std-only"）。"""
     rows = [r for r in prices if r["close"] is not None]
     if not rows:
         return '<p class="empty">這段期間沒有成交資料。</p>'
@@ -56,6 +72,9 @@ def price_chart(prices: list[dict], signals: list[dict], actions: list[dict], la
 
     lo = min(_f(r["low"]) for r in rows)
     hi = max(_f(r["high"]) for r in rows)
+    ma_vals = [v for key, _, _ in MA_LINES for v in (ind or {}).get(key, []) if v is not None]
+    if ma_vals:
+        lo, hi = min(lo, min(ma_vals)), max(hi, max(ma_vals))
     pad = (hi - lo) * 0.06 or hi * 0.02 or 1
     lo, hi = lo - pad, hi + pad
     y = lambda v: top + (hi - v) / (hi - lo) * price_h
@@ -89,6 +108,15 @@ def price_chart(prices: list[dict], signals: list[dict], actions: list[dict], la
                    f'height="{max(1.0, body_bot - body_top):.1f}"/>'
                    f'<rect class="vol" x="{x(i) - bw / 2:.1f}" y="{vy(r["volume"] or 0):.1f}" width="{bw:.1f}" '
                    f'height="{vy0 - vy(r["volume"] or 0):.1f}"/></g>')
+
+    if ind:
+        xs = [x(i) for i in range(n)]
+        out.append('<g class="ma std-only">')
+        for key, cls, label in MA_LINES:
+            ys = [y(v) if v is not None else None for v in ind.get(key, [None] * n)]
+            if any(v is not None for v in ys):
+                out.append(f'<path class="{cls}" d="{_path(xs, ys)}"><title>{label}</title></path>')
+        out.append("</g>")
 
     index = {d: i for i, d in enumerate(dates)}
     for s in signals:
@@ -174,3 +202,40 @@ def sparkline(points: list[tuple[date, float]], width: int = 320, height: int = 
             f'aria-label="加權指數近 {len(vals)} 個交易日走勢">'
             f'<polygon class="area" points="{area}"/><polyline points="{line}"/>'
             f'<circle cx="{xs[-1]:.1f}" cy="{ys[-1]:.1f}" r="3"/></svg>')
+
+
+def macd_chart(prices: list[dict], ind: dict[str, list], width: int = 960) -> str:
+    """MACD：DIF（白線）、MACD 訊號線（藍線）、OSC 柱狀體（正值紅、負值綠），以 0 為中線。"""
+    dif, sig, hist = ind.get("dif", []), ind.get("signal", []), ind.get("hist", [])
+    vals = [abs(v) for v in dif + sig + hist if v is not None]
+    if not vals:
+        return '<p class="empty small">資料不足 35 個交易日，還算不出 MACD。</p>'
+    left, right, top, h, bottom = 8, 64, 14, 120, 22
+    height = top + h + bottom
+    n = len(prices)
+    step = (width - left - right) / max(n, 1)
+    x = lambda i: left + step * (i + 0.5)
+    m = max(vals) * 1.1 or 1
+    y = lambda v: top + (m - v) / (2 * m) * h
+    out = [f'<svg class="chart macd" viewBox="0 0 {width} {height}" role="img" aria-label="MACD">',
+           f'<line class="grid" x1="{left}" x2="{width - right}" y1="{y(0):.1f}" y2="{y(0):.1f}"/>',
+           f'<text class="axis" x="{width - right + 6}" y="{y(0) + 4:.1f}">0</text>',
+           f'<text class="axis" x="{width - right + 6}" y="{y(m * 0.8) + 4:.1f}">{m * 0.8:,.2f}</text>',
+           f'<text class="axis" x="{width - right + 6}" y="{y(-m * 0.8) + 4:.1f}">{-m * 0.8:,.2f}</text>']
+    dates = [r["trade_date"] for r in prices]
+    for i, label in _month_labels(dates):
+        out.append(f'<text class="axis" x="{x(i):.1f}" y="{height - 6}" text-anchor="middle">{label}</text>')
+    bw = max(1.0, step * 0.6)
+    for i, v in enumerate(hist):
+        if v is None:
+            continue
+        y0, y1 = sorted((y(0), y(v)))
+        cls = "up" if v > 0 else "down" if v < 0 else "flat"
+        out.append(f'<rect class="{cls}" x="{x(i) - bw / 2:.1f}" y="{y0:.1f}" width="{bw:.1f}" height="{max(0.5, y1 - y0):.1f}">'
+                   f'<title>{dates[i]:%Y/%m/%d}　DIF {dif[i]:.2f}　MACD {sig[i]:.2f}　OSC {v:+.2f}</title></rect>')
+    xs = [x(i) for i in range(n)]
+    out.append(f'<path class="dif" d="{_path(xs, [y(v) if v is not None else None for v in dif])}"><title>DIF</title></path>')
+    out.append(f'<path class="sig" d="{_path(xs, [y(v) if v is not None else None for v in sig])}"><title>MACD 訊號線</title></path>')
+    out.append(f'<text class="axis" x="{left}" y="{top - 2}">MACD（12, 26, 9）</text>')
+    out.append("</svg>")
+    return "".join(out)

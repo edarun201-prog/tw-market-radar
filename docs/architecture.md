@@ -53,6 +53,14 @@ flowchart LR
 頁籤與 K 線範圍都是單選按鈕＋CSS，不需要程式，所以 iPhone 的檔案預覽與公開網頁（匯出檔）也能切換。
 「歷史訊號表現」用中位數，和同一天全部股票比；筆數少於 30 就只寫「歷史樣本不足」。顏色只用在漲跌幅（紅漲綠跌），資訊用藍色。
 
+## 技術指標與公開 JSON
+
+- `radar/indicators.py`：SMA5／20／60、EMA12／26、MACD（12, 26, 9），用原始收盤價。EMA 和起算日有關，所以網站、匯出檔、
+  `/api/stocks/{symbol}/indicators`、公開 JSON 一律從最近 `HISTORY + WARMUP`（310）個交易日開始算（`lookback()`），數字一致。
+- 個股頁：K 線上的均線、MACD 圖、技術指標與估值／財報兩個區塊都在標準模式顯示；只呈現數值與相對位置，不判斷多空。
+- `radar/web/public_api.py`：每天和公開網頁一起寫出 `api/v1/`（index、market、每檔股票一個檔），由 `publish_pages(extra=...)`
+  放進 gh-pages；任何一個檔案變了才重新推送。財報以「出表日期」和法定期限取較早者判斷何時已公開，過去日期的快照不會看到之後的財報。
+
 ## App 模式（PWA）
 
 - `/manifest.webmanifest`：名稱、圖示（192／512，含 maskable）、`display: standalone`、捷徑（今日雷達、搜尋股票）。
@@ -113,5 +121,5 @@ flowchart LR
 | --- | --- | --- | --- |
 | Phase 2 個人化雷達 | 收藏、搜尋、通知 | 搜尋與 `/api/search`；「最近看過」；signal object 有 `symbol`／`type`／`category` 可直接篩選；App 模式的 service worker 是推播通知的前提 | 收藏清單（先存 localStorage，要跨裝置再加帳號與資料表）；Web Push 需要 HTTPS 與推播金鑰 |
 | Phase 3 歷史統計與回測 | 歷史訊號統計、回測、訊號有效性 | **已完成**：`radar/outcomes.py` 每天重算 `signal_outcomes`（每筆訊號之後 5／20／60 日與隔天才買的 20 日報酬）與 `market_forward_returns`（同一天全部股票的基準）；網站 `/backtest`、`/api/backtest`；快照用 `as_of` 只取當時已知的結果 | 更長的歷史（目前約一年、同一種盤勢）；分盤勢（多頭／空頭）比較 |
-| Phase 4 基本面與事件 | 財報、新聞、法說會、重大事件 | `stocks`／`industries` 以 `stock_id` 串接；`corporate_actions` 已示範「官方資料表 → 還原 → 稽核」的流程；`stock_story` 的 facts 是清單，可以加新的事實 | 各資料源的 adapter、資料表與使用規範確認 |
+| Phase 4 基本面與事件 | 財報、新聞、法說會、重大事件 | **部分完成**：估值（`valuations`，每天）與綜合損益表（`financial_reports`，每季、年度累計 EPS），上市＋上櫃，都來自官方 OpenAPI，只有最新一期所以從 2026-10 起累積；個股頁「估值與獲利」、`/api/stocks/{symbol}`、公開 JSON | EPS 歷史回補（公開資訊觀測站，需先確認使用規範與頻率限制）；新聞、法說會、重大訊息 |
 | Phase 5 AI | AI 解釋、自然語言搜尋、AI Market Summary | 盤後摘要已完成（只看 facts、數字檢查、拒答處理）；`/api/stocks/{symbol}/explain` 是結構化的事實來源；`ai_queries` 資料表已建好（問題、工具呼叫、模型、token、延遲） | 問答介面與工具定義；同樣的數字檢查與不給建議的規則 |

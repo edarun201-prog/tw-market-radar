@@ -35,13 +35,24 @@ def _remove_readonly(func, path, _exc) -> None:
     func(path)
 
 
+def _digest(html: bytes, extra: Path | None) -> str:
+    """首頁加上 extra 資料夾裡每個檔案（路徑＋內容）的雜湊：任何一個檔案變了就重新發布。"""
+    h = hashlib.sha256(html)
+    if extra and extra.exists():
+        for f in sorted(p for p in extra.rglob("*") if p.is_file()):
+            h.update(f.relative_to(extra).as_posix().encode())
+            h.update(f.read_bytes())
+    return h.hexdigest()
+
+
 def publish_pages(src: Path, work_dir: Path, repo_url: str, *, label: str | None = None,
-                  force: bool = False) -> str:
-    """把匯出的單一 HTML 檔 src 發布成 gh-pages 的 index.html。回傳 published／unchanged。"""
+                  force: bool = False, extra: Path | None = None) -> str:
+    """把匯出的單一 HTML 檔 src 發布成 gh-pages 的 index.html；extra 資料夾（例：公開 JSON 的 api/）原樣放在根目錄。
+    回傳 published／unchanged。"""
     if not src.exists() or src.stat().st_size < MIN_BYTES:
         raise RuntimeError(f"找不到可以發布的匯出檔：{src}")
     html = src.read_bytes()
-    digest = hashlib.sha256(html).hexdigest()
+    digest = _digest(html, extra)
     stamp = work_dir.parent / f"{work_dir.name}.published"
     if not force and stamp.exists() and stamp.read_text(encoding="utf-8").strip() == digest:
         log.info("公開網頁：內容和上次相同，不推送")
@@ -51,6 +62,8 @@ def publish_pages(src: Path, work_dir: Path, repo_url: str, *, label: str | None
     if work_dir.exists():
         shutil.rmtree(work_dir, onexc=_remove_readonly)
     work_dir.mkdir(parents=True)
+    if extra and extra.exists():
+        shutil.copytree(extra, work_dir, dirs_exist_ok=True)
     (work_dir / "index.html").write_bytes(html)
     (work_dir / ".nojekyll").write_bytes(b"")
 

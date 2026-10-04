@@ -310,6 +310,60 @@ def anomaly_digest(rows: list[dict], limit: int = 3) -> list[dict]:
     return out
 
 
+# ---- 技術指標、估值、財報（只呈現數字與相對位置，不判斷多空）------------------------------------------
+def indicator_view(last: dict | None, ind: dict) -> dict:
+    """技術指標的最新值，和白話的相對位置（收盤價在均線之上或之下、DIF 在訊號線之上或之下）。"""
+    close = num((last or {}).get("close"))
+    rows = [{"label": f"SMA{n}", "value": ind.get(f"sma{n}"), "hint": f"最近 {n} 個交易日收盤價的平均"} for n in (5, 20, 60)]
+    rows += [{"label": f"EMA{n}", "value": ind.get(f"ema{n}"), "hint": f"{n} 日指數移動平均（越近的日子權重越大）"} for n in (12, 26)]
+    rows += [{"label": "DIF", "value": ind.get("dif"), "hint": "EMA12 − EMA26"},
+             {"label": "MACD", "value": ind.get("signal"), "hint": "DIF 的 9 日指數移動平均（訊號線）"},
+             {"label": "OSC", "value": ind.get("hist"), "hint": "DIF − MACD（柱狀體）"}]
+    facts = []
+    for n in (5, 20, 60):
+        v = ind.get(f"sma{n}")
+        if close is not None and v is not None:
+            rel = "高於" if close > v else "低於" if close < v else "等於"
+            facts.append(f"收盤價 {fmt_price(close)} {rel} {n} 日均線（{v:,.2f}），差 {(close / v - 1) * 100:+.1f}%。")
+    dif, sig, hist = ind.get("dif"), ind.get("signal"), ind.get("hist")
+    if None not in (dif, sig, hist):
+        facts.append(f"DIF {dif:+.2f}，{'高於' if dif > sig else '低於' if dif < sig else '等於'} MACD 訊號線（{sig:+.2f}），"
+                     f"柱狀體 {hist:+.2f}；DIF {'大於' if dif > 0 else '小於' if dif < 0 else '等於'} 0 表示 12 日平均"
+                     f"{'高於' if dif > 0 else '低於' if dif < 0 else '等於'} 26 日平均。")
+    return {"rows": rows, "facts": facts, "enough": any(r["value"] is not None for r in rows)}
+
+
+def valuation_view(v: dict | None) -> dict | None:
+    """官方的本益比、殖利率、股價淨值比。本益比沒有值時說明原因，不自己算。"""
+    if not v:
+        return None
+    pe, dy, pb = num(v["pe_ratio"]), num(v["dividend_yield"]), num(v["pb_ratio"])
+    return {"date": v["trade_date"], "tiles": [
+        {"label": "本益比", "value": f"{pe:,.2f} 倍" if pe is not None else "官方未提供",
+         "hint": "收盤價 ÷ 近四季每股盈餘；近四季虧損時官方不提供"},
+        {"label": "殖利率", "value": f"{dy:.2f}%" if dy is not None else "–", "hint": "每股現金股利 ÷ 收盤價"},
+        {"label": "股價淨值比", "value": f"{pb:,.2f} 倍" if pb is not None else "–", "hint": "收盤價 ÷ 每股淨值"},
+    ]}
+
+
+def financial_rows(rows: list[dict]) -> list[dict]:
+    """財報：官方數字是年度累計；同一年有上一季的資料時才算單季 EPS（第 1 季的累計就是單季）。"""
+    by = {(r["fiscal_year"], r["quarter"]): r for r in rows}
+    out = []
+    for r in rows:
+        y, qn, eps = r["fiscal_year"], r["quarter"], num(r["eps"])
+        prev = by.get((y, qn - 1))
+        if qn == 1:
+            eps_q = eps
+        elif prev and eps is not None and prev["eps"] is not None:
+            eps_q = eps - float(prev["eps"])
+        else:
+            eps_q = None
+        span = "第 1 季" if qn == 1 else ("全年" if qn == 4 else f"前 {qn} 季累計")
+        out.append(r | {"period": f"{y} Q{qn}", "span": span, "eps_q": eps_q})
+    return out
+
+
 # ---- 個股：為什麼被雷達注意 ---------------------------------------------------------------
 def _move_phrase(day_ret: float) -> str:
     if abs(day_ret) < 0.01:
@@ -399,6 +453,23 @@ METHODOLOGY = [
     ]),
     ("量比", [
         "量比＝今天成交量 ÷ 前 20 個交易日的平均成交量（不含今天）。量比 4 表示今天的成交量是平常的 4 倍。",
+    ]),
+    ("技術指標", [
+        "SMA n（簡單移動平均）＝最近 n 個交易日收盤價的平均，網站畫 5、20、60 日。",
+        "EMA n（指數移動平均）＝越近的日子權重越大（權重 2 ÷ (n + 1)），以前 n 日的 SMA 當起點；網站列 12、26 日。",
+        "MACD（12, 26, 9）：DIF＝EMA12 − EMA26；MACD（訊號線）＝DIF 的 9 日 EMA；OSC（柱狀體）＝DIF − MACD。",
+        "都用原始收盤價計算（和多數看盤軟體相同），除權息日的跳空會影響均線。EMA 和起算日有關，所以網站、匯出檔、API、公開 JSON 一律從最近約 310 個交易日開始算，數字才會一致。",
+        "指標只描述過去價格的平均與變化，不代表之後的走勢，也不是買賣訊號。",
+    ]),
+    ("估值與財報", [
+        "本益比、殖利率、股價淨值比：證交所與櫃買中心每天公布的數字，不自己計算；近四季虧損時官方不提供本益比。",
+        "EPS、營業收入、稅後淨利：證交所與櫃買中心開放資料的綜合損益表（每季），數字是年度累計（例：第 2 季＝上半年合計）。",
+        "開放資料只提供最新一季，所以從 2026 年第 2 季開始逐季累積；同一年有上一季的資料時，才算出單季 EPS。",
+        "銀行與金控的損益表格式不同，營業收入欄位意思不一致，不列出；EPS 與淨利照常列出。",
+    ]),
+    ("公開資料（JSON）", [
+        "公開網頁每天也會一起發布 JSON，給需要的人用程式讀取，不需要金鑰：網址後面加上 api/v1/index.json（欄位說明與股票清單）、api/v1/market.json（大盤與當天訊號）、api/v1/stocks/代號.json（近 120 個交易日的價格、技術指標、估值、財報、訊號）。",
+        "數字和網站同一套計算，只描述資料。",
     ]),
     ("冷卻機制", [
         "同一檔股票的同一種訊號，如果在冷卻期內已經出現過，就不會再重複出現。",
