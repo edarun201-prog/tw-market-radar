@@ -333,3 +333,20 @@ def write_financial_reports(conn, src: int, market: str, reports) -> tuple[int, 
                       eps = EXCLUDED.eps, published_on = EXCLUDED.published_on, source_id = EXCLUDED.source_id,
                       updated_at = now()""", rows)
     return len(rows), len(reports) - len(rows)
+
+
+def write_investor_conferences(conn, src: int, market: str, confs) -> tuple[int, int]:
+    """寫入法說會公告（同一則公告重跑會覆蓋）；回傳（寫入筆數, 不在股票清單而略過的筆數）。"""
+    ids = _stock_ids(conn, market)
+    rows = [(ids[c.symbol], c.announced_on, c.announced_at, c.starts_on, c.ends_on, c.start_time, c.location,
+             c.summary, c.subject, src) for c in confs if c.symbol in ids]
+    with conn.cursor() as cur:
+        cur.executemany(
+            """INSERT INTO investor_conferences (stock_id, announced_on, announced_at, starts_on, ends_on, start_time,
+                                                 location, summary, subject, source_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (stock_id, announced_on, announced_at) DO UPDATE
+                  SET starts_on = EXCLUDED.starts_on, ends_on = EXCLUDED.ends_on, start_time = EXCLUDED.start_time,
+                      location = EXCLUDED.location, summary = EXCLUDED.summary, subject = EXCLUDED.subject,
+                      source_id = EXCLUDED.source_id""", rows)
+    return len(rows), len(confs) - len(rows)

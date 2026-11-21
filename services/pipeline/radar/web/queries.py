@@ -321,6 +321,31 @@ def stock_valuation(conn, stock_id: int, until: date | None = None) -> dict | No
                           ORDER BY trade_date DESC LIMIT 1""", {"id": stock_id, "until": until})
 
 
+# ---- 法說會 -----------------------------------------------------------------
+# 同一家公司同一天的法說會當成同一場：更正公告常常改的就是時間或地點，取最新的一則；
+# until：只看那天（含）以前已經公告的（匯出過去的日子）。
+_CONF_LATEST = """SELECT DISTINCT ON (c.stock_id, c.starts_on)
+                         c.stock_id, c.starts_on, c.ends_on, c.start_time, c.location, c.summary, c.subject, c.announced_on
+                    FROM investor_conferences c
+                   WHERE (%(until)s::date IS NULL OR c.announced_on <= %(until)s)
+                   ORDER BY c.stock_id, c.starts_on, c.announced_on DESC, c.announced_at DESC"""
+
+
+def stock_conferences(conn, stock_id: int, until: date | None = None, limit: int = 5) -> list[dict]:
+    """這檔股票最近的法說會（之後的在前）。"""
+    return _all(conn, f"""SELECT * FROM ({_CONF_LATEST}) c WHERE c.stock_id = %(id)s
+                          ORDER BY c.starts_on DESC, c.start_time DESC NULLS LAST LIMIT %(n)s""",
+                {"id": stock_id, "until": until, "n": limit})
+
+
+def upcoming_conferences(conn, d: date, days: int = 7, limit: int = 30) -> list[dict]:
+    """d 起 days 天內舉行的法說會（含進行中的多天論壇），依日期與時間排序；只列 d 以前已公告的。"""
+    return _all(conn, f"""SELECT c.*, s.symbol, s.name FROM ({_CONF_LATEST}) c JOIN stocks s ON s.id = c.stock_id
+                          WHERE c.ends_on >= %(d)s AND c.starts_on < %(d)s::date + %(days)s
+                          ORDER BY c.starts_on, c.start_time NULLS LAST, s.symbol LIMIT %(n)s""",
+                {"d": d, "days": days, "until": d, "n": limit})
+
+
 def stock_financials(conn, stock_id: int, until: date | None = None, limit: int = 8) -> list[dict]:
     """最近幾季的綜合損益（年度累計），新的在前；until：只取那天以前公布的（匯出過去的日子）。"""
     return _all(conn, """SELECT fiscal_year, quarter, report_type, revenue, net_income, eps, published_on

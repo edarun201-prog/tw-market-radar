@@ -1,7 +1,8 @@
 """估值與財報：抓取 → 存原始檔 → 正規化 → 入庫，並記錄在 ingestion_runs。
 
 證交所、櫃買中心的 OpenAPI 都只提供「最新一期」：估值是最新一個交易日，財報是最新一季（年度累計）。
-所以每天抓一次，從 2026-10 起逐日、逐季累積；錯過的日子補不回來。每天共 14 次請求（間隔與其他抓取相同）。
+所以每天抓一次，從 2026-10 起逐日、逐季累積；錯過的日子補不回來。每天共 16 次請求（間隔與其他抓取相同）。
+法說會也在這裡：每日重大訊息（同樣只有最新一天）裡符合條款第 12 款的公告，2026-11 起累積。
 失敗只記錄，不影響行情與其他步驟。
 """
 from __future__ import annotations
@@ -13,11 +14,12 @@ from radar import raw_store, repository as repo
 from radar.adapters.base import FetchError
 from radar.config import TAIPEI, Settings
 from radar.normalizers.common import NormalizeError
+from radar.normalizers.conferences import normalize_conferences
 from radar.normalizers.fundamentals import normalize_financial_reports, normalize_valuations
 
 log = logging.getLogger(__name__)
 
-VALUATION, FIN_REPORT = "BWIBBU", "FIN_REPORT"
+VALUATION, FIN_REPORT, CONFERENCE = "BWIBBU", "FIN_REPORT", "CONF"
 MIN_ROWS = 100      # 少於這個數字當成來源異常，不寫入
 
 
@@ -75,8 +77,27 @@ def sync_financial_reports(conn, adapter, settings: Settings, as_of: date) -> st
     return "success"
 
 
+def sync_conferences(conn, adapter, settings: Settings, as_of: date) -> str:
+    """當天重大訊息裡的法說會公告。沒有法說會的日子是 0 筆，不算異常；ingestion_runs 記在抓取日。"""
+    src = repo.source_id(conn, adapter.source_code)
+    try:
+        p = adapter.fetch_material_news(as_of)
+        path = str(raw_store.save(settings.raw_dir, p))
+        confs, warnings = normalize_conferences(p)
+    except (FetchError, NormalizeError) as e:
+        return _fail(conn, src, CONFERENCE, as_of, str(e))
+    repo.start_run(conn, src, CONFERENCE, as_of)
+    with conn.transaction():
+        n, skipped = repo.write_investor_conferences(conn, src, _market(adapter), confs)
+    if skipped:
+        warnings.append(f"{skipped} 則的公司不在股票清單，略過")
+    repo.finish_run(conn, src, CONFERENCE, as_of, "success", row_count=n, warnings=warnings, raw_path=path)
+    log.info("%s 法說會公告：%d 則", adapter.source_code, n)
+    return "success"
+
+
 def update_fundamentals(settings: Settings, adapters=None) -> dict[str, str]:
-    """上市、上櫃的估值與財報各抓一次；任何一項失敗都不影響其他項。"""
+    """上市、上櫃的估值、財報與法說會公告各抓一次；任何一項失敗都不影響其他項。"""
     if adapters is None:
         from radar.adapters.tpex import TpexAdapter
         from radar.adapters.twse import TwseAdapter
@@ -85,7 +106,7 @@ def update_fundamentals(settings: Settings, adapters=None) -> dict[str, str]:
     results = {}
     with repo.connect(settings.database_url) as conn:
         for adapter in adapters:
-            for step in (sync_valuations, sync_financial_reports):
+            for step in (sync_valuations, sync_financial_reports, sync_conferences):
                 key = f"{adapter.source_code} {step.__name__}"
                 try:
                     results[key] = step(conn, adapter, settings, today)

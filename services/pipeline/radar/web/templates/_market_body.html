@@ -117,6 +117,25 @@
   </section>
 </div>
 
+{# 接下來 7 天的法說會（標準模式）：上市、上櫃公司的重大訊息公告，只列時間地點 #}
+{% if conferences %}
+<section class="block std-only" id="conferences" aria-labelledby="conf-title">
+  <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">Conferences</p><h2 id="conf-title">接下來 7 天的法說會</h2></div>
+    <span class="count">{{ conferences|length }} 場</span></div>
+  <div class="scroll"><table class="list">
+    <thead><tr><th>日期</th><th>公司</th><th>地點</th></tr></thead>
+    <tbody>
+    {% for c in conferences %}
+      <tr><td class="nowrap">{{ c.starts_on.strftime('%m/%d') }}（{{ '一二三四五六日'[c.starts_on.weekday()] }}）{% if c.ends_on != c.starts_on %}～{{ c.ends_on.strftime('%m/%d') }}{% endif %}{% if c.start_time %} <span class="muted small">{{ c.start_time.strftime('%H:%M') }}</span>{% endif %}</td>
+        <td>{{ m.stock_link(c.symbol, c.name) }}</td>
+        <td class="small">{{ c.location or '–' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="small muted">來自公司的重大訊息公告（2026/11 起累積）。只列出時間與地點，開法說會不代表有利多或利空。</p>
+</section>
+{% endif %}
+
 {% if ov.summary %}
 {% set simulated = ov.summary.provider == 'simulated' %}
 <section class="block summary-block std-only" aria-labelledby="sum-title">

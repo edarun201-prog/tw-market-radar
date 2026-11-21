@@ -113,6 +113,11 @@ class PoliteHttpAdapter:
             body[kind], url = self._get_rows(self.FIN_REPORT_URL.format(kind=kind), f"{self.source_code} 綜合損益表 {kind}")
         return self._payload("FIN_REPORT", as_of, url, body, any(body.values()), {k: len(v) for k, v in body.items()})
 
+    def fetch_material_news(self, as_of: date) -> RawPayload:
+        """每日重大訊息（OpenAPI 只有最新一天，1 次請求），法說會的公告在這裡；子類別設定 NEWS_URL。as_of 是抓取日。"""
+        rows, url = self._get_rows(self.NEWS_URL, f"{self.source_code} 重大訊息")
+        return self._payload("CONF", as_of, url, {"data": rows}, bool(rows), {"rows": len(rows)})
+
     def _payload(self, dataset: str, d: date, url: str, body, has_data: bool, meta: dict) -> RawPayload:
         from radar.config import TAIPEI
         return RawPayload(source=self.source_code, dataset=dataset, trade_date=d, url=url,

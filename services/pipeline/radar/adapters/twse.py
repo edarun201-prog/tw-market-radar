@@ -38,6 +38,7 @@ class TwseAdapter(PoliteHttpAdapter):
     source_code = "TWSE"
     drives_calendar = True      # 交易日曆以證交所為準
     FIN_REPORT_URL = f"{OPENAPI}/opendata/t187ap06_L_{{kind}}"   # 上市公司綜合損益表（最新一季）
+    NEWS_URL = f"{OPENAPI}/opendata/t187ap04_L"                  # 上市公司每日重大訊息（法說會公告）
 
     def __init__(self, settings: Settings, client: httpx.Client | None = None):
         super().__init__(settings, client or httpx.Client(headers=HEADERS, timeout=settings.request_timeout_sec))

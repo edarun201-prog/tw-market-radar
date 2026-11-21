@@ -40,6 +40,7 @@ class TpexAdapter(PoliteHttpAdapter):
     source_code = "TPEX"
     drives_calendar = False
     FIN_REPORT_URL = f"{OPENAPI}/mopsfin_t187ap06_O_{{kind}}"     # 上櫃公司綜合損益表（最新一季）
+    NEWS_URL = f"{OPENAPI}/mopsfin_t187ap04_O"                    # 上櫃公司每日重大訊息（法說會公告）
 
     def __init__(self, settings: Settings, client: httpx.Client | None = None):
         super().__init__(settings, client or httpx.Client(headers=HEADERS, timeout=settings.request_timeout_sec))

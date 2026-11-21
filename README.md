@@ -47,6 +47,7 @@ flowchart LR
 | holidaySchedule | 當年度休市日曆（OpenAPI） | 每 7 天 | `trading_calendar`（今天以後） |
 | BWIBBU_ALL＋tpex_mainboard_peratio_analysis | 本益比、殖利率、股價淨值比（上市＋上櫃，OpenAPI 最新一天） | 每天 | `valuations` |
 | t187ap06_L_*＋mopsfin_t187ap06_O_* | 綜合損益表：EPS、營業收入、稅後淨利（年度累計，OpenAPI 最新一季） | 每天 | `financial_reports` |
+| t187ap04_L＋mopsfin_t187ap04_O | 每日重大訊息裡的法說會公告（符合條款第 12 款）：日期、時間、地點、摘要（OpenAPI 最新一天，2026-11 起累積） | 每天 | `investor_conferences` |
 
 所有寫入都是 upsert，重跑不會重複；每次抓取都記錄在 `ingestion_runs`。原始回應都先存檔，改了解析規則可以從檔案重算。
 

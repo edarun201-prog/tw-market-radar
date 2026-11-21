@@ -84,6 +84,7 @@
     {% if last %}<li><a class="glass" href="#price-{{ sym }}"><span class="ic" aria-hidden="true">📈</span><b>價格走勢</b><span>近期價格與 K 線</span></a></li>{% endif %}
     {% if last %}<li class="std-only"><a class="glass" href="#tech-{{ sym }}"><span class="ic" aria-hidden="true">〰️</span><b>技術指標</b><span>SMA、EMA、MACD 的最新數值</span></a></li>{% endif %}
     <li class="std-only"><a class="glass" href="#fund-{{ sym }}"><span class="ic" aria-hidden="true">📊</span><b>估值與獲利</b><span>本益比、殖利率、EPS</span></a></li>
+    <li class="std-only"><a class="glass" href="#conf-{{ sym }}"><span class="ic" aria-hidden="true">🎤</span><b>法說會</b><span>公司公告的法人說明會</span></a></li>
     <li class="std-only"><a class="glass" href="#flows-{{ sym }}"><span class="ic" aria-hidden="true">🏦</span><b>法人動向</b><span>外資、投信、自營商買賣超</span></a></li>
     <li class="std-only"><a class="glass" href="#history-{{ sym }}"><span class="ic" aria-hidden="true">🔎</span><b>歷史訊號</b><span>這檔股票過去出現過的訊號</span></a></li>
     {% if peers %}<li class="std-only"><a class="glass" href="#peers-{{ sym }}"><span class="ic" aria-hidden="true">🏭</span><b>同產業</b><span>和同產業其他股票比較</span></a></li>{% endif %}
@@ -154,6 +155,20 @@
   </table></div>
   <p class="small muted">財報數字是年度累計（例：Q2＝上半年合計）。單季 EPS 要同一年上一季的資料也收進來才算得出來；官方的公開資料只提供最新一季，所以從 2026 年第 2 季開始逐季累積。{% if financials[0].report_type in ('basi', 'fh') %}銀行與金控的營業收入格式不同，不列出。{% endif %}</p>
   {% else %}<p class="empty">還沒有這檔股票的財報資料。</p>{% endif %}
+</section>
+
+{# 法說會（標準模式）：公司的重大訊息公告（符合條款第 12 款），2026/11 起累積 #}
+<section class="block std-only" id="conf-{{ sym }}" aria-labelledby="conf-t-{{ sym }}">
+  <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">Conferences</p><h2 id="conf-t-{{ sym }}">法說會</h2></div></div>
+  {% if conferences %}
+  <ul class="plain-list">
+    {% for c in conferences %}
+    <li><b>{{ c.starts_on.strftime('%Y/%m/%d') }}{% if c.ends_on != c.starts_on %}～{{ c.ends_on.strftime('%m/%d') }}{% endif %}{% if c.start_time %} {{ c.start_time.strftime('%H:%M') }}{% endif %}</b>
+      {{ c.location or '' }}{% if c.summary %}<br><span class="small muted">{{ c.summary }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">還沒有這檔股票的法說會公告（2026/11 起累積）。</p>{% endif %}
+  <p class="small muted">簡報與影音請到公開資訊觀測站的「法人說明會一覽表」查看。</p>
 </section>
 
 {# ⑥ 三大法人（標準模式） #}
