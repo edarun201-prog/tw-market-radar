@@ -78,6 +78,12 @@ flowchart LR
    .\.venv\Scripts\python -m radar migrate
    ```
 
+   Windows 上裝的是一般版 `psycopg`，不是 `psycopg[binary]`：Windows 11 的「智慧型應用程式控制」會擋掉 binary 版沒有簽章的 DLL
+   （`ImportError: DLL load failed ... 應用程式控制原則已封鎖此檔案`），而這個功能關掉之後要重灌 Windows 才能再開。
+   一般版改用 PostgreSQL 附帶、有 EnterpriseDB 簽章的 `libpq.dll`，程式啟動時會自己到 `C:\Program Files\PostgreSQL\<最新版本>\bin` 找，
+   不需要改 PATH，工作排程器用 `pythonw` 執行時也找得到。PostgreSQL 裝在別的地方時，在環境變數設 `PG_BIN` 指到那個 `bin` 資料夾。
+   以前裝過 binary 版的 `.venv`，先執行一次 `.\.venv\Scripts\python -m pip uninstall -y psycopg-binary`。
+
 4. 回補一年：先下載原始檔（不需要資料庫，約 40 分鐘），再從檔案入庫（約 4 分鐘），接著補除權息與公司資料、計算訊號：
 
    ```powershell
