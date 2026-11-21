@@ -82,6 +82,16 @@ def test_backtest_view_compares_with_all_stocks_and_only_describes_the_past():
     for text in texts:
         _no_advice(text)
     assert any("不代表之後" in c for c in bt["caveats"])
+
+    # 一整段漲了 31%，但最近一個月一路跌：不能只寫整段的漲幅（2026-11 的實際情況）
+    from datetime import date
+    falling = {**period, "index_from": 27426.0, "index_to": 36033.0, "index_change": 0.314, "recent_from": 46888.0,
+               "recent_change": -0.232, "peak_date": date(2026, 10, 6), "peak": 49823.0, "from_peak": -0.277}
+    market = next(m for m in explain.backtest_view(rows, falling, base, ROUND_TRIP_COST)["myths"] if m["type"] is None)
+    assert market["verdict"] == "最近不成立：大盤在跌"
+    assert "最近 20 個交易日從 46,888 點跌到 36,033 點（-23.2%）" in market["finding"]
+    assert "10/06 的最高點 49,823 點低了 27.7%" in market["finding"]
+    _no_advice(market["finding"])
     assert all("過去" in t["sentence"] for t in bt["types"] if t["h"])
 
 

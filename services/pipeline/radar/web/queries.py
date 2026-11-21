@@ -303,9 +303,20 @@ def backtest_period(conn, as_of: date | None = None) -> dict:
                  ORDER BY trade_date DESC LIMIT 1) AS index_to""",
                {"i": TAIEX, "s": row.get("start") or date.min, "e": as_of}) or {}
     a, b = idx.get("index_from"), idx.get("index_to")
+    # 整段的漲跌會蓋過最近的走勢（例：一年漲 30%，但最近一個月跌 20%），所以另外給最近 20 個交易日與期間最高點
+    recent = _all(conn, """SELECT trade_date, close FROM market_indices
+                            WHERE index_code = %(i)s AND (%(e)s::date IS NULL OR trade_date <= %(e)s)
+                            ORDER BY trade_date DESC LIMIT 21""", {"i": TAIEX, "e": as_of})
+    peak = _one(conn, """SELECT trade_date, close FROM market_indices
+                          WHERE index_code = %(i)s AND trade_date >= %(s)s AND (%(e)s::date IS NULL OR trade_date <= %(e)s)
+                          ORDER BY close DESC LIMIT 1""", {"i": TAIEX, "s": row.get("start") or date.min, "e": as_of})
+    r0 = float(recent[-1]["close"]) if len(recent) == 21 else None
     return {"start": row.get("start"), "end": row.get("end"), "n": row.get("n") or 0,
             "index_from": float(a) if a else None, "index_to": float(b) if b else None,
-            "index_change": float(b) / float(a) - 1 if a and b else None}
+            "index_change": float(b) / float(a) - 1 if a and b else None,
+            "recent_from": r0, "recent_change": float(b) / r0 - 1 if r0 and b else None,
+            "peak_date": peak["trade_date"] if peak else None, "peak": float(peak["close"]) if peak else None,
+            "from_peak": float(b) / float(peak["close"]) - 1 if peak and b else None}
 
 
 # ---- 估值與財報 -------------------------------------------------------------

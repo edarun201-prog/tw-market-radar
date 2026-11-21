@@ -565,11 +565,22 @@ def _myth(key: str, claim: str, by: dict, base: dict, period: dict, cost: float)
         b20 = base.get("h20")
         if not b20 or period.get("index_change") is None:
             return None
-        verdict = "資料不支持這個說法" if b20["up_share"] < 0.55 else "這段期間大致成立"
-        return {"type": None, "label": "大盤與一般股票", "claim": claim, "verdict": verdict,
-                "finding": f"這段期間加權指數從 {period['index_from']:,.0f} 點到 {period['index_to']:,.0f} 點（{_p(period['index_change'])}）。"
-                           f"但任選一天買進全部上市股票，20 個交易日後平均只有 {_share(b20['up_share'])} 的股票上漲，"
-                           f"中位數 {_p(b20['median'])}。",
+        recent, from_peak = period.get("recent_change"), period.get("from_peak")
+        falling = (recent is not None and recent <= -0.05) or (from_peak is not None and from_peak <= -0.10)
+        if falling:
+            verdict = "最近不成立：大盤在跌"
+        else:
+            verdict = "資料不支持這個說法" if b20["up_share"] < 0.55 else "這段期間大致成立"
+        finding = f"這段期間加權指數從 {period['index_from']:,.0f} 點到 {period['index_to']:,.0f} 點（{_p(period['index_change'])}）。"
+        if recent is not None:
+            move = "漲" if recent > 0 else "跌"
+            finding += f"最近 20 個交易日從 {period['recent_from']:,.0f} 點{move}到 {period['index_to']:,.0f} 點（{_p(recent)}）"
+            if from_peak is not None and from_peak <= -0.05:
+                finding += f"，比 {period['peak_date']:%m/%d} 的最高點 {period['peak']:,.0f} 點低了 {abs(from_peak) * 100:.1f}%"
+            finding += "。"
+        finding += (f"任選一天買進全部上市股票，20 個交易日後平均只有 {_share(b20['up_share'])} 的股票上漲，"
+                    f"中位數 {_p(b20['median'])}。")
+        return {"type": None, "label": "大盤與一般股票", "claim": claim, "verdict": verdict, "finding": finding,
                 "points": ["加權指數依市值計算，台積電等少數大型股的影響很大；指數大漲，不代表大部分股票都在漲。",
                            "所以下面每種訊號都和「同一天全部股票」比，而不是和加權指數比。"]}
     s, d = by.get(key, {}).get("h20"), by.get(key, {}).get("d20")
