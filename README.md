@@ -87,6 +87,11 @@ flowchart LR
    不需要改 PATH，工作排程器用 `pythonw` 執行時也找得到。PostgreSQL 裝在別的地方時，在環境變數設 `PG_BIN` 指到那個 `bin` 資料夾。
    以前裝過 binary 版的 `.venv`，先執行一次 `.\.venv\Scripts\python -m pip uninstall -y psycopg-binary`。
 
+   `setup.sql` 與 `.env.example` 的資料庫密碼（`radar`、`radar_web`）是公開的開發用預設值。資料庫雖然只接受本機連線，
+   正式使用前還是建議換成隨機密碼：用 `ALTER ROLE radar PASSWORD '…'`（`radar_web` 同樣）改掉，再把 `.env` 裡三個連線網址的密碼一起改。
+   每日流程最後會用 `pg_dump` 把資料庫備份到 `data\backups\`（留最近 14 份，`python -m radar backup` 可以手動備份）；
+   建議偶爾把最新一份複製到隨身碟或雲端硬碟，電腦壞掉時才有得還原。
+
 4. 回補一年：先下載原始檔（不需要資料庫，約 40 分鐘），再從檔案入庫（約 4 分鐘），接著補除權息與公司資料、計算訊號：
 
    ```powershell

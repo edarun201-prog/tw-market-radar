@@ -188,6 +188,11 @@ def publish_latest_pages(settings: Settings, force: bool = False) -> None:
                   settings.pages_repo, label=d.isoformat(), force=force, extra=public)
 
 
+def backup(settings: Settings) -> None:
+    from radar.jobs.backup import backup_database
+    backup_database(settings)
+
+
 def _safe(step, settings: Settings, label: str) -> None:
     """輔助資料或後續計算失敗只記 log，不影響行情；下一次排程會再試。"""
     try:
@@ -207,6 +212,7 @@ def daily_job(settings: Settings) -> None:
     _safe(update_news, settings, "新聞")
     _safe(export_latest, settings, "匯出 HTML 檔")
     _safe(publish_latest_pages, settings, "發布公開網頁")
+    _safe(backup, settings, "備份資料庫")
 
 
 def wait_for_database(settings: Settings, timeout_sec: float = 180, every_sec: float = 10) -> None:
@@ -246,6 +252,7 @@ def run_daily(settings: Settings) -> None:
     _safe(update_news, settings, "新聞")
     _safe(export_latest, settings, "匯出 HTML 檔")
     _safe(publish_latest_pages, settings, "發布公開網頁")
+    _safe(backup, settings, "備份資料庫")
     log.info("每日流程結束")
 
 

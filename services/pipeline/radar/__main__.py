@@ -20,6 +20,7 @@
   web        啟動網站與 JSON API（預設 http://127.0.0.1:8000）
   daily      跑一次每日流程就結束（Windows 工作排程器用）
   morning    早上流程：開盤快照（只存、不公開）、新聞、匯出並發布公開網頁（Windows 工作排程器平日 09:35）
+  backup     備份資料庫到 data/backups（pg_dump，留最近 14 份；每日流程最後也會做）
   news       新聞：Yahoo 股市、中央社財經的 RSS，只存標題與連結（每日、早上流程也會做）
   migrate    不用 dbmate 建立資料表（本機 PostgreSQL 用）
 """
@@ -279,6 +280,11 @@ def cmd_morning(args, settings) -> None:
     run_morning(settings)
 
 
+def cmd_backup(args, settings) -> None:
+    from radar.jobs.backup import backup_database
+    print(backup_database(settings))
+
+
 def cmd_news(args, settings) -> None:
     from radar.news import update_news
     print(update_news(settings))
@@ -387,6 +393,9 @@ def main() -> None:
 
     p = sub.add_parser("morning", help="開盤快照（只存、不公開）、新聞、匯出並發布公開網頁；跑完就結束")
     p.set_defaults(fn=cmd_morning)
+
+    p = sub.add_parser("backup", help="備份資料庫到 data/backups（pg_dump，留最近 14 份）")
+    p.set_defaults(fn=cmd_backup)
 
     p = sub.add_parser("news", help="新聞 RSS（Yahoo 股市、中央社財經），只存標題與連結")
     p.set_defaults(fn=cmd_news)
