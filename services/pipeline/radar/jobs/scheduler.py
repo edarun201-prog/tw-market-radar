@@ -123,6 +123,11 @@ def update_fundamentals(settings: Settings) -> None:
     run(settings)
 
 
+def update_news(settings: Settings) -> None:
+    from radar.news import update_news as run
+    run(settings)
+
+
 def update_analytics(settings: Settings) -> None:
     """特徵與訊號：從上次算到的日子往前 7 天重算到最新的行情日（涵蓋補抓的日子；重算結果相同）。"""
     from radar.features import build_features
@@ -199,6 +204,7 @@ def daily_job(settings: Settings) -> None:
     _safe(update_fundamentals, settings, "估值與財報")
     _safe(update_analytics, settings, "計算特徵與訊號")
     _safe(update_summary, settings, "盤後摘要")
+    _safe(update_news, settings, "新聞")
     _safe(export_latest, settings, "匯出 HTML 檔")
     _safe(publish_latest_pages, settings, "發布公開網頁")
 
@@ -237,6 +243,7 @@ def run_daily(settings: Settings) -> None:
     _safe(update_fundamentals, settings, "估值與財報")
     _safe(update_analytics, settings, "計算特徵與訊號")
     _safe(update_summary, settings, "盤後摘要")
+    _safe(update_news, settings, "新聞")
     _safe(export_latest, settings, "匯出 HTML 檔")
     _safe(publish_latest_pages, settings, "發布公開網頁")
     log.info("每日流程結束")

@@ -357,6 +357,25 @@ def upcoming_conferences(conn, d: date, days: int = 7, limit: int = 30) -> list[
                 {"d": d, "days": days, "until": d, "n": limit})
 
 
+# ---- 新聞 -------------------------------------------------------------------
+# until：只看那天（含，台北時間）以前發布的（看過去的日子）；None＝到現在為止（最新一天，含隔天早上的新聞）
+_NEWS = """SELECT title, url, feed, published_at AT TIME ZONE 'Asia/Taipei' AS published
+             FROM news_items
+            WHERE {scope} AND (%(until)s::date IS NULL OR published_at AT TIME ZONE 'Asia/Taipei' < %(until)s::date + 1)
+              AND published_at > COALESCE(%(until)s::date, now()::date) - %(days)s
+            ORDER BY published_at DESC LIMIT %(n)s"""
+
+
+def market_news(conn, until: date | None = None, limit: int = 8, days: int = 3) -> list[dict]:
+    """大盤／財經新聞（Yahoo 股市台股、中央社財經），新的在前。"""
+    return _all(conn, _NEWS.format(scope="stock_id IS NULL"), {"until": until, "n": limit, "days": days})
+
+
+def stock_news(conn, stock_id: int, until: date | None = None, limit: int = 5, days: int = 30) -> list[dict]:
+    """這檔股票的新聞（Yahoo 股市個股），新的在前。"""
+    return _all(conn, _NEWS.format(scope="stock_id = %(id)s"), {"id": stock_id, "until": until, "n": limit, "days": days})
+
+
 def stock_financials(conn, stock_id: int, until: date | None = None, limit: int = 8) -> list[dict]:
     """最近幾季的綜合損益（年度累計），新的在前；until：只取那天以前公布的（匯出過去的日子）。"""
     return _all(conn, """SELECT fiscal_year, quarter, report_type, revenue, net_income, eps, published_on

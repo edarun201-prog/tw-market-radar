@@ -117,6 +117,20 @@
   </section>
 </div>
 
+{# 財經新聞：說明大盤為什麼這樣動。只放標題與連結（全文有著作權），新手模式只看前 3 則 #}
+{% if news %}
+<section class="block" id="news" aria-labelledby="news-title">
+  <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">News</p><h2 id="news-title">財經新聞</h2></div></div>
+  <ul class="plain-list">
+    {% for n in news %}
+    <li{% if loop.index > 3 %} class="std-only"{% endif %}><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">{{ n.title }}</a>
+      <span class="muted small nowrap">{{ n.published.strftime('%m/%d %H:%M') }}・{{ {'yahoo_market': 'Yahoo 股市', 'cna_finance': '中央社'}.get(n.feed, n.feed) }}</span></li>
+    {% endfor %}
+  </ul>
+  <p class="small muted">標題連到原新聞網站。新聞是媒體的報導與看法，這個網站只整理標題，不代表對股價的判斷。</p>
+</section>
+{% endif %}
+
 {# 接下來 7 天的法說會（標準模式）：上市、上櫃公司的重大訊息公告，只列時間地點 #}
 {% if conferences %}
 <section class="block std-only" id="conferences" aria-labelledby="conf-title">

@@ -171,6 +171,18 @@
   <p class="small muted">簡報與影音請到公開資訊觀測站的「法人說明會一覽表」查看。</p>
 </section>
 
+{# 相關新聞（標準模式）：Yahoo 股市的個股新聞，只放標題與連結；只抓有訊號的股票 #}
+{% if news %}
+<section class="block std-only" id="news-{{ sym }}" aria-labelledby="news-t-{{ sym }}">
+  <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">News</p><h2 id="news-t-{{ sym }}">相關新聞</h2></div></div>
+  <ul class="plain-list">
+    {% for n in news %}<li><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">{{ n.title }}</a>
+      <span class="muted small nowrap">{{ n.published.strftime('%m/%d %H:%M') }}</span></li>{% endfor %}
+  </ul>
+  <p class="small muted">標題連到 Yahoo 股市。新聞是媒體的報導與看法，不代表這個網站對股價的判斷。</p>
+</section>
+{% endif %}
+
 {# ⑥ 三大法人（標準模式） #}
 <section class="block std-only" id="flows-{{ sym }}">
   <h2>三大法人買賣超 <span class="muted small">近 {{ flow_days }} 個交易日，單位：張</span></h2>

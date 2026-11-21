@@ -48,6 +48,8 @@ flowchart LR
 | BWIBBU_ALL＋tpex_mainboard_peratio_analysis | 本益比、殖利率、股價淨值比（上市＋上櫃，OpenAPI 最新一天） | 每天 | `valuations` |
 | t187ap06_L_*＋mopsfin_t187ap06_O_* | 綜合損益表：EPS、營業收入、稅後淨利（年度累計，OpenAPI 最新一季） | 每天 | `financial_reports` |
 | t187ap04_L＋mopsfin_t187ap04_O | 每日重大訊息裡的法說會公告（符合條款第 12 款）：日期、時間、地點、摘要（OpenAPI 最新一天，2026-11 起累積） | 每天 | `investor_conferences` |
+| Yahoo 股市、中央社財經 RSS | 新聞標題、連結、時間（不存全文）；個股新聞只抓最近一天有訊號的股票（最多 60 檔） | 每天、平日早上 | `news_items` |
+| 證交所基本市況報導網站 | 開盤快照：有訊號的股票與兩個指數，開盤後的報價。只給系統判斷用，網站讀不到（對外提供要先取得證交所授權） | 平日 09:35 | `open_snapshots` |
 
 所有寫入都是 upsert，重跑不會重複；每次抓取都記錄在 `ingestion_runs`。原始回應都先存檔，改了解析規則可以從檔案重算。
 
@@ -103,6 +105,12 @@ flowchart LR
    ```
 
    觸發條件是平日 18:30 和每次登入（延後 2 分鐘，補上關機、睡眠錯過的日子）。用 `pythonw` 執行、不會跳出視窗，紀錄在 `data\logs\daily.log`。
+
+   早上的流程（選用）：平日 09:35 抓開盤快照（只存、不公開）與新聞，再更新公開網頁（仍是前一天的盤後資料，只多了最新新聞，沒有盤中股價）：
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\windows\register-morning-task.ps1
+   ```
 
 之後的指令都在 `services\pipeline` 用 `.\.venv\Scripts\python -m radar <指令>` 執行；設定自動讀根目錄的 `.env`。
 

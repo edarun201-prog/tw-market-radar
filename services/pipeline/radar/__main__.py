@@ -19,6 +19,8 @@
   audit      一致性檢查（除權息 vs 生效日成交價）
   web        啟動網站與 JSON API（預設 http://127.0.0.1:8000）
   daily      跑一次每日流程就結束（Windows 工作排程器用）
+  morning    早上流程：開盤快照（只存、不公開）、新聞、匯出並發布公開網頁（Windows 工作排程器平日 09:35）
+  news       新聞：Yahoo 股市、中央社財經的 RSS，只存標題與連結（每日、早上流程也會做）
   migrate    不用 dbmate 建立資料表（本機 PostgreSQL 用）
 """
 from __future__ import annotations
@@ -272,6 +274,16 @@ def cmd_daily(args, settings) -> None:
     run_daily(settings)
 
 
+def cmd_morning(args, settings) -> None:
+    from radar.jobs.morning import run_morning
+    run_morning(settings)
+
+
+def cmd_news(args, settings) -> None:
+    from radar.news import update_news
+    print(update_news(settings))
+
+
 def cmd_migrate(args, settings) -> None:
     from radar.migrate import migrate
     with repo.connect(settings.database_url) as conn:
@@ -372,6 +384,12 @@ def main() -> None:
 
     p = sub.add_parser("daily", help="補抓漏掉的日子，到了排程時間再抓今天；跑完就結束")
     p.set_defaults(fn=cmd_daily)
+
+    p = sub.add_parser("morning", help="開盤快照（只存、不公開）、新聞、匯出並發布公開網頁；跑完就結束")
+    p.set_defaults(fn=cmd_morning)
+
+    p = sub.add_parser("news", help="新聞 RSS（Yahoo 股市、中央社財經），只存標題與連結")
+    p.set_defaults(fn=cmd_news)
 
     p = sub.add_parser("migrate", help="不用 dbmate 建立或更新資料表")
     p.set_defaults(fn=cmd_migrate)

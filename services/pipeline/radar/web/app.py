@@ -103,6 +103,8 @@ def home_context(conn, day: date, requested: date | None = None) -> dict:
         "spark": charts.sparkline([(r["trade_date"], r["close"]) for r in ov["index_history"]]),
         "sectors": _sector_ranking(ov["sectors"]),
         "conferences": q.upcoming_conferences(conn, day),
+        # 最新一天：新聞到現在為止（早上的流程會帶進盤前新聞）；過去的日子：只到那天
+        "news": q.market_news(conn, None if next_day is None else day),
     }
 
 
@@ -144,6 +146,7 @@ def stock_context(conn, prof: dict, days: int = 250, flow_days: int = 60, as_of:
         "valuation": explain.valuation_view(q.stock_valuation(conn, prof["id"], as_of)),
         "financials": explain.financial_rows(q.stock_financials(conn, prof["id"], as_of)),
         "conferences": q.stock_conferences(conn, prof["id"], as_of),
+        "news": q.stock_news(conn, prof["id"], None if as_of is None or as_of >= (q.latest_trade_date(conn) or as_of) else as_of),
         "flows_svg": charts.flows_chart(q.stock_flows(conn, prof["id"], flow_days, as_of)),
         "peers": q.industry_peers(conn, prof["id"], last["trade_date"]) if last and prof["industry"] else [],
         "range": (prices[0]["trade_date"], prices[-1]["trade_date"]) if prices else None,
