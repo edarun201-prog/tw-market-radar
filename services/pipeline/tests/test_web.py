@@ -108,6 +108,11 @@ def test_home_reading_order_and_modes(client, market):
     assert "偏強" in html or "偏弱" in html or "分歧" in html or "持平" in html  # 市場狀況標籤
     assert 'data-set-mode="beginner"' in html and 'class="std-only"' in html or "std-only" in html
     assert html.count('id="help-vol_spike"') == 1                             # 說明整頁只放一份
+    # 新手模式精簡：漲跌家數、一句話、雷達分類清單只在標準模式出現；新手看到的是前往今日雷達的入口
+    assert '<dl class="keyfig std-only">' in html and '<div class="oneline std-only">' in html
+    assert '<section class="block std-only" aria-labelledby="brief-title">' in html and 'class="radar-cta glass beg-only"' in html
+    assert '<div class="radar-row empty">' not in html + radar               # 0 檔的分類新手模式不顯示
+    assert '<dl class="cat-sum std-only">' in radar and '<section class="block std-only" aria-labelledby="digest-title">' in radar
 
 
 def test_stock_page_explains_why(client, market):

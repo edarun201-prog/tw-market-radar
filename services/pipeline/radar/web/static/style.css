@@ -643,6 +643,18 @@ header.top { border-bottom: 1px solid transparent;
   border-radius: 999px; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line); transition: background 0.2s ease, box-shadow 0.2s ease; }
 .kp-more:hover, .card-more:hover { background: #fff; color: #000; box-shadow: var(--glow); text-decoration: none; }
 
+/* 新手模式：今日市場往今日雷達的入口（取代重複的分類清單） */
+.radar-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; color: var(--ink); text-decoration: none;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.radar-cta > span:first-child { display: grid; gap: 2px; }
+.radar-cta b { font-size: 17px; }
+.radar-cta > span:last-child { font-size: 20px; color: var(--muted); }
+.radar-cta:hover { transform: translateY(-2px); text-decoration: none; }
+
+/* 新手模式：訊號卡片只留最關鍵的一個數字（signal_metrics 第一個），其餘在標準模式 */
+html.js[data-mode="beginner"] .rv-cards .mx > div:nth-child(n+2),
+html:not(.js):has(#mode-beginner:checked) .rv-cards .mx > div:nth-child(n+2) { display: none; }
+
 /* 類股輪動：發光的長條 */
 .meter { background: rgba(255, 255, 255, 0.06); }
 .meter i.up-bg { box-shadow: 0 0 12px rgba(240, 98, 94, 0.55); }

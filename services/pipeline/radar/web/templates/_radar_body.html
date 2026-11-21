@@ -8,13 +8,15 @@
     {{ m.daynav('/radar') }}
   </div>
   {% if requested and requested != day %}<p class="note">{{ requested }} 沒有開市，顯示在這之前最近的交易日。</p>{% endif %}
-  <dl class="cat-sum">
+  {# 各類數量：下面的頁籤已經有，新手模式不重複 #}
+  <dl class="cat-sum std-only">
     {% for sec in radar %}<div><dt>{{ sec.label }}</dt><dd>{{ sec.total }}</dd></div>{% endfor %}
   </dl>
 </section>
 
+{# 異常摘要：新手模式不顯示，當天的重點集中在今日市場的「3 大重點」，避免兩組「前 3」 #}
 {% if digest %}
-<section class="block" aria-labelledby="digest-title">
+<section class="block std-only" aria-labelledby="digest-title">
   <div class="sec-head"><div><p class="eyebrow sm" aria-hidden="true">Digest</p><h2 id="digest-title">今日異常摘要</h2></div>
     <span class="count">資料異常程度較高的 {{ digest|length }} 檔</span></div>
   <ol class="cards digest">
@@ -79,7 +81,7 @@
         </div>
       </details>
       {% else %}
-      <div class="radar-row empty">{{ head }}</div>
+      <div class="radar-row empty std-only">{{ head }}</div>
       {% endif %}
       {% endfor %}
     </div>
